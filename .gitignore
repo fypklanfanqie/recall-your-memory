@@ -33,3 +33,4 @@ local.properties
 # ---- IDE / 系统 ----
 /.idea/
 .DS_Store
+/.android/
