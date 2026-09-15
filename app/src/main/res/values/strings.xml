@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">回声</string>
+
+    <!-- dock -->
+    <string name="dock_memory">记忆</string>
+    <string name="dock_favorites">收藏</string>
+    <string name="dock_todos">待办</string>
+    <string name="dock_notes">备忘</string>
+    <string name="dock_settings">设置</string>
+
+    <!-- memory -->
+    <string name="memory_title">记忆</string>
+    <string name="memory_recall">回溯记忆</string>
+    <string name="memory_status_off">尚未开启聆听</string>
+    <string name="memory_status_on">正在聆听</string>
+    <string name="memory_status_paused">已暂停</string>
+    <string name="memory_empty">还没有记忆\n点上面的按钮，回溯刚才的声音</string>
+    <string name="memory_window">窗口 %1$s</string>
+
+    <!-- common -->
+    <string name="empty_favorites">还没有收藏\n收藏的记忆会永久保留</string>
+    <string name="empty_todos">还没有待办</string>
+    <string name="empty_notes">还没有备忘录</string>
+    <string name="common_add">添加</string>
+    <string name="common_delete">删除</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_confirm">确定</string>
+
+    <!-- settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_section_recording">录音</string>
+    <string name="settings_section_ai">AI 与云端</string>
+    <string name="settings_section_appearance">外观</string>
+    <string name="settings_section_general">通用</string>
+    <string name="settings_window">记录时长</string>
+    <string name="settings_window_desc">只保留点击回溯前这段时间的声音</string>
+    <string name="settings_vad">人声灵敏度</string>
+    <string name="settings_vad_low">低</string>
+    <string name="settings_vad_medium">中</string>
+    <string name="settings_vad_high">高</string>
+    <string name="settings_liquid_glass">液态玻璃</string>
+    <string name="settings_liquid_glass_desc">iOS 风格玻璃质感界面（关闭更省电）</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_providers">AI 供应商</string>
+    <string name="settings_providers_desc">内置国内 8 家大模型，支持自定义</string>
+    <string name="settings_models">本地语音模型</string>
+    <string name="settings_models_desc">离线转写模型管理</string>
+    <string name="settings_keepalive">后台保活引导</string>
+    <string name="settings_about">关于回声</string>
+</resources>

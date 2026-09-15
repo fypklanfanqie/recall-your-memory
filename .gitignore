@@ -1,0 +1,35 @@
+# ---- Android / Gradle ----
+*.iml
+.gradle/
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/app/build
+
+# ---- 本机构建环境（不入库）----
+/.gradle-home/
+/.gradle/
+/.android-home/
+/.kotlin/
+/.npm-cache/
+/.tmp/
+/.home/
+/Microsoft/
+
+# ---- 签名密钥与口令（绝不入库）----
+/keystore/
+/keystore.properties
+*.jks
+*.keystore
+
+# ---- 构建产物与模型 ----
+*.apk
+*.aab
+/tools/out
+/tools/models
+
+# ---- IDE / 系统 ----
+/.idea/
+.DS_Store
