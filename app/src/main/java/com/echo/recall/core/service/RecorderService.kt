@@ -44,6 +44,7 @@ class RecorderService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         RecorderNotifications.ensureChannel(this)
         // 必须立刻进入前台（startForegroundService 有 5 秒限制）
         promoteToForeground(statusText = "正在聆听", paused = false)
@@ -69,10 +70,28 @@ class RecorderService : Service() {
                 scope.launch { performRecall() }
             }
             else -> {
-                scope.launch { startListening() }
+                // intent == null：系统在进程被杀后按 START_STICKY 重启服务。
+                // 仅当用户此前开启过聆听时才恢复，避免「已手动停止」后被复活。
+                val restartedAfterKill = intent == null
+                scope.launch {
+                    val settings = settingsRepository.settings.first()
+                    if (restartedAfterKill && !settings.recordingEnabled) {
+                        stopSelf()
+                    } else {
+                        startListening()
+                    }
+                }
             }
         }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // 用户划掉后台卡片：安排一次自愈探测（原生机可复活；激进 ROM 的 force stop 无法自愈）
+        if (engine.isListening || !engine.status.value.let { it.state == RecorderEngine.State.IDLE }) {
+            scheduleKeepAliveSelfHeal(this)
+        }
     }
 
     private suspend fun startListening() {
@@ -181,6 +200,7 @@ class RecorderService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         releaseWakeLock()
         scope.cancel()
         super.onDestroy()
@@ -189,6 +209,11 @@ class RecorderService : Service() {
     companion object {
         private const val TAG = "RecorderService"
         private const val WAKELOCK_TAG = "echo:listening"
+
+        /** 自愈探测用：服务是否活着 */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         const val ACTION_START = "com.echo.recall.action.START"
         const val ACTION_STOP = "com.echo.recall.action.STOP"

@@ -70,6 +70,12 @@
             </intent-filter>
         </service>
 
+        <!-- 保活自愈：进程被清后尝试拉回录音前台服务（尽力而为，见类注释） -->
+        <receiver
+            android:name=".core.service.KeepAliveAlarm"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- 开机/升级后提示恢复（不尝试自启麦克风服务：Android 15 平台限制） -->
         <receiver
             android:name=".core.service.BootReceiver"
