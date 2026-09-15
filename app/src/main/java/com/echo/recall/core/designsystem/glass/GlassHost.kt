@@ -139,7 +139,7 @@ fun GlassHost(
 }
 
 /**
- * 玻璃表面修饰符：
+ * 玻璃表面修饰符（基于正版 Kyant0 backdrop-android 2.0.1）：
  * - LIQUID：drawBackdrop 真实折射（vibrancy → colorControls，blur → BlurEffect，
  *   lens → SDF 折射+色散；形状须为 CornerBasedShape，否则跳过 lens 只模糊）。
  * - FROSTED：仅 blur（毛玻璃）。
@@ -151,7 +151,6 @@ fun Modifier.liquidGlassSurface(
     surfaceColor: Color,
     innerShadowRadius: Dp? = null,
     refraction: Boolean = true,
-    exportedBackdrop: LayerBackdrop? = null,
 ): Modifier {
     val mode = LocalGlassMode.current
     val params = LocalGlassParams.current
@@ -188,7 +187,6 @@ fun Modifier.liquidGlassSurface(
                 } else {
                     null
                 },
-                exportedBackdrop = exportedBackdrop,
                 onDrawSurface = {
                     drawRect(colors.glassTint.copy(alpha = params.tintAlpha))
                 },
