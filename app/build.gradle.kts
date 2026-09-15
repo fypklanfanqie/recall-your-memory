@@ -2,7 +2,7 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // AGP 9 内置 Kotlin：不再应用 org.jetbrains.kotlin.android
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -21,14 +21,14 @@ val canSignRelease = releaseKeystoreFile.exists() &&
 
 android {
     namespace = "com.echo.recall"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.echo.recall"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -72,11 +72,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf("-opt-in=kotlin.RequiresOptIn")
-    }
-
     buildFeatures {
         compose = true
     }
@@ -95,6 +90,14 @@ android {
     }
 }
 
+// Kotlin 2.4：compilerOptions DSL（旧 kotlinOptions 已移除）
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.add("-opt-in=kotlin.RequiresOptIn")
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -106,7 +109,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.work.runtime.ktx)
 
-    implementation(platform(libs.compose.bom))
+    // Compose 直接钉版本（androidx Compose 1.12.1 = JB Compose 1.12.0 对应版），
+    // 不再用 BOM：backdrop-android 2.0.1 传递依赖 JB Compose 1.12.0，需与 androidx 版本对齐。
     implementation(libs.compose.foundation)
     implementation(libs.compose.animation)
     implementation(libs.compose.ui)
@@ -115,6 +119,10 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
     debugImplementation(libs.compose.ui.tooling)
+
+    // Kyant0 液态玻璃（Maven Central 正版，Apache-2.0）
+    implementation(libs.kyant.backdrop)
+    implementation(libs.kyant.shapes)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -137,5 +145,4 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.compose.bom))
 }

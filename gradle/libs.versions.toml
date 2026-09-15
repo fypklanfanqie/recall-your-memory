@@ -1,20 +1,31 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.0.21"
-ksp = "2.0.21-1.0.28"
-hilt = "2.52"
-room = "2.6.1"
-composeBom = "2024.12.01"
-coreKtx = "1.15.0"
-activityCompose = "1.9.3"
-lifecycle = "2.8.7"
-navigation = "2.8.5"
+# P1 工具链升级（2026-09）：为接入正版 Kyant0 backdrop-android 2.0.1（要求 kotlin-stdlib 2.4.10
+# + JB Compose 1.12.0 → androidx Compose 1.12）而升级。androidx Compose 1.12 要求 AGP ≥ 9.1
+# + compileSdk 37 → Gradle 9.7.1（见 build.ps1）+ AGP 9.1.1；AGP 9 内置 Kotlin，不再单独应用
+# kotlin-android 插件；Hilt 2.60+ 同样要求 AGP 9。
+agp = "9.1.1"
+kotlin = "2.4.10"
+# KSP 自 2.3.0 起独立版本线（不再跟随 Kotlin 版本号）
+ksp = "2.3.12"
+hilt = "2.60.1"
+room = "2.8.5"
+# androidx Compose 1.12.1 = JB Compose Multiplatform 1.12.0 的 Android 对应版本
+composeUi = "1.12.1"
+material3 = "1.4.0"
+composeIcons = "1.7.8"
+coreKtx = "1.19.0"
+activityCompose = "1.12.4"
+lifecycle = "2.11.0"
+navigation = "2.10.1"
 datastore = "1.1.1"
 work = "2.10.0"
 okhttp = "4.12.0"
-serialization = "1.7.3"
-coroutines = "1.9.0"
+serialization = "1.9.0"
+coroutines = "1.10.2"
 sherpaOnnx = "v1.13.5"
+# Kyant0 正版库（Maven Central，Apache-2.0）
+backdrop = "2.0.1"
+shapes = "1.2.1"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
@@ -30,18 +41,17 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
-compose-animation = { group = "androidx.compose.animation", name = "animation" }
-compose-ui = { group = "androidx.compose.ui", name = "ui" }
-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "composeUi" }
+compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "composeUi" }
+compose-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "composeUi" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "composeUi" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "composeUi" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview", version.ref = "composeUi" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "composeIcons" }
 
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
-hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.2.0" }
 hilt-work = { group = "androidx.hilt", name = "hilt-work", version = "1.2.0" }
 hilt-ext-compiler = { group = "androidx.hilt", name = "hilt-compiler", version = "1.2.0" }
@@ -57,6 +67,9 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 
 sherpa-onnx = { group = "com.github.k2-fsa.sherpa-onnx", name = "sherpa-onnx", version.ref = "sherpaOnnx" }
+
+kyant-backdrop = { group = "io.github.kyant0", name = "backdrop-android", version.ref = "backdrop" }
+kyant-shapes = { group = "io.github.kyant0", name = "shapes-android", version.ref = "shapes" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }

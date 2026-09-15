@@ -28,7 +28,7 @@ foreach ($d in @($env:ANDROID_USER_HOME, (Join-Path $root ".home"), (Join-Path $
 $env:TEMP = Join-Path $root ".tmp"
 $env:TMP = $env:TEMP
 
-$gradle = Join-Path $env:GRADLE_USER_HOME "dist\gradle-8.11.1\bin\gradle.bat"
+$gradle = Join-Path $env:GRADLE_USER_HOME "dist\gradle-9.7.1\bin\gradle.bat"
 if (-not (Test-Path $gradle)) { throw "Gradle distribution not found: $gradle" }
 
 if (-not $Tasks -or $Tasks.Count -eq 0) { $Tasks = @("assembleDebug") }
