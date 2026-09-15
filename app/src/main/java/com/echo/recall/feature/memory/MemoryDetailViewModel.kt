@@ -145,8 +145,7 @@ class MemoryDetailViewModel @Inject constructor(
     }
 
     /**
-     * 从这条记忆的转写里提取待办，写入待办列表。
-     * 这是「听到的话 → 可执行事项」的联动：只发送转写文字。
+     * 把这条记忆的转写文字直接存进待办（不走 LLM）。
      */
     fun extractTodos() {
         val entity = memory.value ?: return
@@ -155,25 +154,13 @@ class MemoryDetailViewModel @Inject constructor(
             _events.tryEmit(DetailEvent.Message("请先本地转写这段记忆"))
             return
         }
-        if (!llmConfigured) {
-            _events.tryEmit(DetailEvent.Message(llmService.notConfiguredMessage()))
-            return
-        }
         _todoUi.value = TodoExtractUi.Loading
         viewModelScope.launch {
-            llmService.extractTodos(
-                transcript = transcript,
-                timeRange = TimeFormat.range(entity.wallStartAt, entity.wallEndAt),
-            ).fold(
-                onSuccess = { titles ->
-                    val count = todoRepository.createMany(titles, notes = "来自 ${TimeFormat.friendly(entity.createdAt)} 的记忆")
-                    _todoUi.value = TodoExtractUi.Done(count)
-                    _events.tryEmit(DetailEvent.Message("已添加 $count 条待办，去「待办」页查看"))
-                },
-                onFailure = { error ->
-                    _todoUi.value = TodoExtractUi.Error(error.message ?: "提取失败")
-                },
-            )
+            val title = transcript.lineSequence().firstOrNull { it.isNotBlank() }
+                ?.trim()?.take(30) ?: "记忆转写"
+            val count = todoRepository.createMany(listOf(title), notes = transcript)
+            _todoUi.value = TodoExtractUi.Done(count)
+            _events.tryEmit(DetailEvent.Message("已把转写文字存入待办"))
         }
     }
 
