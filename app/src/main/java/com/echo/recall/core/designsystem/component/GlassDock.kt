@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -37,11 +38,13 @@ import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastRoundToInt
 import com.echo.recall.core.designsystem.glass.GlassMode
 import com.echo.recall.core.designsystem.glass.LocalEchoBackdrop
 import com.echo.recall.core.designsystem.glass.LocalGlassMode
@@ -163,18 +166,44 @@ fun GlassDock(
                 items.forEach { tab -> DockTab(tab, currentRoute, onSelect, clickable = false) }
             }
 
-            // 3) 选中滑块（玻璃上玻璃，画在最上层；无指针处理，点击穿透到底下标签）。
-            //    官方行为：静止时只是一层柔和的浅色胶囊，按压时折射/高光才浮现。
+            // 3) 选中滑块（玻璃上玻璃，画在最上层）。
+            //    官方行为：静止柔和；可水平拖动，拖到哪个 tab 就切到哪个；按压时折射浮现。
             val density = LocalDensity.current
             val isLight = !LocalIsDarkTheme.current
+            val tabWidthPx = with(density) { tabWidth.toPx() }
+            var dragTabs by remember { mutableStateOf(0f) }
+            val visualPosition = (sliderProgress + dragTabs).coerceIn(0f, (count - 1).toFloat())
             Box(
                 Modifier
                     .align(Alignment.CenterStart)
                     .graphicsLayer {
-                        translationX = with(density) { (tabWidth * sliderProgress + 4.dp).toPx() }
+                        translationX = with(density) { (tabWidth * visualPosition + 4.dp).toPx() }
                     }
                     .height(56.dp)
                     .width(tabWidth - 8.dp)
+                    .pointerInput(count) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { pressingSelected = true },
+                            onHorizontalDrag = { change, amount ->
+                                change.consume()
+                                dragTabs = (dragTabs + amount / tabWidthPx)
+                                    .coerceIn(-selectedIndex.toFloat(), (count - 1 - selectedIndex).toFloat())
+                            },
+                            onDragEnd = {
+                                val target = (sliderProgress + dragTabs)
+                                    .fastRoundToInt()
+                                    .coerceIn(0, count - 1)
+                                dragTabs = 0f
+                                pressingSelected = false
+                                val route = items.getOrNull(target)?.route
+                                if (route != null && route != currentRoute) onSelect(items[target])
+                            },
+                            onDragCancel = {
+                                dragTabs = 0f
+                                pressingSelected = false
+                            },
+                        )
+                    }
                     .drawBackdrop(
                         backdrop = rememberCombinedBackdrop(screenBackdrop, tabsBackdrop),
                         shape = { Capsule() },

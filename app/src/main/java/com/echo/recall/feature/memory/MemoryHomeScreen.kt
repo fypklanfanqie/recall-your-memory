@@ -56,6 +56,7 @@ import com.echo.recall.core.designsystem.component.SectionLabel
 import com.echo.recall.core.designsystem.component.toast
 import com.echo.recall.core.designsystem.glass.GlassHost
 import com.echo.recall.core.designsystem.glass.LocalEchoBackdrop
+import com.echo.recall.core.designsystem.glass.LocalGlassParams
 import com.echo.recall.core.designsystem.theme.EchoType
 import com.echo.recall.core.designsystem.theme.LocalEchoColors
 import com.echo.recall.core.permission.EchoPermissions
@@ -243,6 +244,7 @@ private fun GlassHero(
 ) {
     val colors = LocalEchoColors.current
     val backdrop = LocalEchoBackdrop.current
+    val params = LocalGlassParams.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -267,11 +269,22 @@ private fun GlassHero(
                             effects = {
                                 if (!size.isSpecified) return@drawBackdrop
                                 vibrancy()
-                                blur(16.dp.toPx())
-                                lens(18.dp.toPx(), 24.dp.toPx())
+                                blur(params.blurRadiusDp.dp.toPx())
+                                lens(
+                                    params.refractionHeightDp.dp.toPx(),
+                                    params.refractionAmountDp.dp.toPx(),
+                                    chromaticAberration = params.chromaticAberration,
+                                )
                             },
-                            highlight = { com.kyant.backdrop.highlight.Highlight.Default.copy(alpha = if (pressed) 0.9f else 0.5f) },
-                            onDrawSurface = { drawRect(colors.surface.copy(alpha = 0.34f)) },
+                            highlight = {
+                                com.kyant.backdrop.highlight.Highlight.Default.copy(
+                                    alpha = if (pressed) params.highlightAlpha else params.highlightAlpha * 0.55f,
+                                )
+                            },
+                            onDrawSurface = {
+                                drawRect(colors.accent.copy(alpha = params.tintAlpha * 0.35f))
+                                drawRect(colors.surface.copy(alpha = 0.22f))
+                            },
                         )
                     } else {
                         Modifier
@@ -324,6 +337,7 @@ private fun GlassHero(
 private fun GlassPill(text: String, onClick: () -> Unit) {
     val colors = LocalEchoColors.current
     val backdrop = LocalEchoBackdrop.current
+    val params = LocalGlassParams.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Box(
         modifier = Modifier
@@ -335,10 +349,14 @@ private fun GlassPill(text: String, onClick: () -> Unit) {
                         effects = {
                             if (!size.isSpecified) return@drawBackdrop
                             vibrancy()
-                            blur(12.dp.toPx())
-                            lens(16.dp.toPx(), 16.dp.toPx())
+                            blur(params.blurRadiusDp.dp.toPx() * 0.6f)
+                            lens(
+                                params.refractionHeightDp.dp.toPx() * 0.6f,
+                                params.refractionAmountDp.dp.toPx() * 0.6f,
+                                chromaticAberration = params.chromaticAberration,
+                            )
                         },
-                        onDrawSurface = { drawRect(colors.surface.copy(alpha = 0.32f)) },
+                        onDrawSurface = { drawRect(colors.surface.copy(alpha = 0.28f + params.tintAlpha * 0.2f)) },
                     )
                 } else {
                     Modifier
