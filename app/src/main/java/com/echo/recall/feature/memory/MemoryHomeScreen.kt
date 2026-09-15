@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
@@ -181,14 +187,27 @@ fun MemoryHomeScreen(
             }
         },
         overlay = {
-            // 固定悬浮的液态玻璃回溯按钮（官方 LiquidButton 模式）
-            Column(
+            // 可拖动的悬浮液态玻璃回溯按钮：拖到哪停到哪（AssistiveTouch 式）
+            val density = LocalDensity.current
+            var canvas by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+            var heroOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset(-1f, -1f)) }
+            val heroPx = with(density) { 172.dp.toPx() }
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 218.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+                    .fillMaxSize()
+                    .onSizeChanged { canvas = it },
+            )
+            if (canvas.width > 0) {
+                val base = androidx.compose.ui.geometry.Offset(
+                    (canvas.width - heroPx) / 2f,
+                    with(density) { 218.dp.toPx() },
+                )
+                val pos = if (heroOffset.x < 0f) base else heroOffset
                 GlassHero(
+                    pos = pos,
+                    canvas = canvas,
+                    heroPx = heroPx,
+                    onPosChange = { heroOffset = it },
                     label = if (listening) stringResource(R.string.memory_recall) else "开启聆听",
                     enabled = true,
                     onClick = {
@@ -198,18 +217,6 @@ fun MemoryHomeScreen(
                             else -> permissionLauncher.launch(EchoPermissions.requiredForListening())
                         }
                     },
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = if (listening) {
-                        "取出点击前 ${settings.windowLabel()} 的声音（取走后缓冲清空）"
-                    } else {
-                        "回声只在本机处理音频，不会自动上传"
-                    },
-                    style = EchoType.footnote,
-                    color = colors.secondaryLabel,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 48.dp),
                 )
             }
             // 聆听中的悬浮液态玻璃操作药丸（Dock 上方）
@@ -235,9 +242,13 @@ fun MemoryHomeScreen(
     )
 }
 
-/** 悬浮液态玻璃回溯大按钮（按压时折射浮现，无常驻动画以省电） */
+/** 可拖动的悬浮液态玻璃回溯按钮：拖到哪停到哪；点按执行回溯 */
 @Composable
 private fun GlassHero(
+    pos: androidx.compose.ui.geometry.Offset,
+    canvas: androidx.compose.ui.unit.IntSize,
+    heroPx: Float,
+    onPosChange: (androidx.compose.ui.geometry.Offset) -> Unit,
     label: String,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -245,89 +256,111 @@ private fun GlassHero(
     val colors = LocalEchoColors.current
     val backdrop = LocalEchoBackdrop.current
     val params = LocalGlassParams.current
+    val density = LocalDensity.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+    val latestPos by androidx.compose.runtime.rememberUpdatedState(pos)
+    var dragging by remember { mutableStateOf(false) }
     val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (pressed) 0.955f else 1f,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 380f),
+        targetValue = if (dragging) 1.06f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 400f),
         label = "heroScale",
     )
-    androidx.compose.foundation.layout.BoxWithConstraints(
-        modifier = Modifier.size(172.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(172.dp)
-                .scale(scale)
-                .then(
-                    if (backdrop != null) {
-                        Modifier.drawBackdrop(
-                            backdrop = backdrop,
-                            shape = { androidx.compose.foundation.shape.CircleShape },
-                            effects = {
-                                if (!size.isSpecified) return@drawBackdrop
-                                vibrancy()
-                                blur(params.blurRadiusDp.dp.toPx())
-                                lens(
-                                    params.refractionHeightDp.dp.toPx(),
-                                    params.refractionAmountDp.dp.toPx(),
-                                    chromaticAberration = params.chromaticAberration,
-                                )
-                            },
-                            highlight = {
-                                com.kyant.backdrop.highlight.Highlight.Default.copy(
-                                    alpha = if (pressed) params.highlightAlpha else params.highlightAlpha * 0.55f,
-                                )
-                            },
-                            onDrawSurface = {
-                                drawRect(colors.accent.copy(alpha = params.tintAlpha * 0.35f))
-                                drawRect(colors.surface.copy(alpha = 0.22f))
-                            },
-                        )
-                    } else {
-                        Modifier
-                            .background(
-                                androidx.compose.ui.graphics.Brush.radialGradient(
-                                    listOf(colors.accent.copy(alpha = 0.14f), colors.surface),
-                                ),
-                                androidx.compose.foundation.shape.CircleShape,
+    val margin = with(density) { 10.dp.toPx() }
+    Box(
+        modifier = Modifier
+            .graphicsLayer {
+                translationX = pos.x
+                translationY = pos.y
+            }
+            .size(172.dp)
+            .scale(scale)
+            .then(
+                if (backdrop != null) {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { androidx.compose.foundation.shape.CircleShape },
+                        effects = {
+                            if (!size.isSpecified) return@drawBackdrop
+                            vibrancy()
+                            blur(params.blurRadiusDp.dp.toPx())
+                            lens(
+                                params.refractionHeightDp.dp.toPx(),
+                                params.refractionAmountDp.dp.toPx(),
+                                chromaticAberration = params.chromaticAberration,
                             )
-                    },
-                )
-                .clickable(
-                    interactionSource = interaction,
-                    indication = null,
-                    enabled = enabled,
-                ) {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                    onClick()
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(colors.accent.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.material3.Icon(
-                        imageVector = Icons.Rounded.History,
-                        contentDescription = null,
-                        tint = if (enabled) colors.accent else colors.tertiaryLabel,
-                        modifier = Modifier.size(30.dp),
+                        },
+                        highlight = {
+                            com.kyant.backdrop.highlight.Highlight.Default.copy(
+                                alpha = if (dragging) params.highlightAlpha else params.highlightAlpha * 0.55f,
+                            )
+                        },
+                        onDrawSurface = {
+                            drawRect(colors.accent.copy(alpha = params.tintAlpha * 0.35f))
+                            drawRect(colors.surface.copy(alpha = 0.22f))
+                        },
                     )
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = label,
-                    style = EchoType.headline,
-                    color = if (enabled) colors.label else colors.tertiaryLabel,
+                } else {
+                    Modifier
+                        .background(
+                            androidx.compose.ui.graphics.Brush.radialGradient(
+                                listOf(colors.accent.copy(alpha = 0.14f), colors.surface),
+                            ),
+                            androidx.compose.foundation.shape.CircleShape,
+                        )
+                },
+            )
+            .pointerInput(canvas) {
+                detectDragGestures(
+                    onDragStart = { dragging = true },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        val maxX = (canvas.width - heroPx - margin).coerceAtLeast(margin)
+                        val maxY = (canvas.height - heroPx - margin).coerceAtLeast(margin)
+                        onPosChange(
+                            androidx.compose.ui.geometry.Offset(
+                                (latestPos.x + amount.x).coerceIn(margin, maxX),
+                                (latestPos.y + amount.y).coerceIn(margin, maxY),
+                            )
+                        )
+                    },
+                    onDragEnd = {
+                        dragging = false
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick)
+                    },
+                    onDragCancel = { dragging = false },
                 )
             }
+            .pointerInput(enabled) {
+                detectTapGestures {
+                    if (enabled) {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        onClick()
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(58.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(colors.accent.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Rounded.History,
+                    contentDescription = null,
+                    tint = if (enabled) colors.accent else colors.tertiaryLabel,
+                    modifier = Modifier.size(30.dp),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = label,
+                style = EchoType.headline,
+                color = if (enabled) colors.label else colors.tertiaryLabel,
+            )
         }
     }
 }
