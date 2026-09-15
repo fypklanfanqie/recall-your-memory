@@ -93,7 +93,7 @@ class TranscriptionCoordinator @Inject constructor(
             var engine: SenseVoiceEngine? = null
             try {
                 val chunks = resolveChunks(entity, segments, pcmProvider)
-                engine = SenseVoiceEngine(context.assets, modelManager.modelDir.absolutePath)
+                engine = SenseVoiceEngine(modelManager.modelDir.absolutePath)
 
                 var language: String? = null
                 var emotion: String? = null
