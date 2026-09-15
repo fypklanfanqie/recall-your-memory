@@ -28,10 +28,12 @@
 
 **验证门禁（全部通过）**：`testDebugUnitTest` **69 项测试 / 0 失败** · `assembleDebug` 通过 · `assembleRelease` 通过（R8 混淆 + 资源压缩，签名验证通过）
 
+**R1 UI/UX 与液态玻璃重构（2026-09，详见 PLAN.md §14.1）**：修复「立即本地转写」native 闪退（sherpa-onnx 构造参数误用）；工具链升级 Kotlin 2.4.10 / AGP 9.1.1 / Gradle 9.7.1 / Compose 1.12.1；液态玻璃删除 vendored 源码、换正版 **Kyant0 backdrop-android 2.0.1 + Shapes 1.2.1**，Dock 换官方 2.0 玻璃上玻璃模式；iOS 组件库（图标芯片/动画分段/英雄按钮重设计）、全局触感与 push 转场。
+
 **已实现的 v1.5 联动**：记忆详情页可「**提取待办**」——用云端 LLM 从这段录音的转写里抽出待办，一键写进待办列表（只发送文字）。
 
 > 真机验收清单见 [docs/VERIFY.md](docs/VERIFY.md)（可用 `tools/verify-device.ps1` 自动跑一遍），交付与安装说明见 [docs/DELIVERY.md](docs/DELIVERY.md)。
-> 液态玻璃未使用第三方库的原因见 [PLAN.md](PLAN.md) 第 14 节；工具链适配的坑也在同一节。
+> 液态玻璃现使用正版 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.1）+ [Kyant0/Shapes](https://github.com/Kyant0/Shapes)（1.2.1）；升级记录见 [PLAN.md](PLAN.md) §14.1。
 
 ## 项目结构
 

@@ -316,6 +316,16 @@ NoteEntity(id, title, content, createdAt, updatedAt, pinned, aiVersionsJson?)
 | 转写时机 | 仅回溯时批转写 | 回溯时批转写 **+ 事后补转写**（.m4a 解码回 PCM 后按片段偏移切片） | 模型可能后下载；也支持「重新转写」重试 |
 | 记忆问答记录 | 存库（chatJson） | **会话级**（离开页面即释放） | 降低库表复杂度；长期保存留待 v1.5 |
 
+### 14.1 R1 UI/UX 与液态玻璃重构记录（2026-09）
+
+| 项 | 结论 |
+|----|------|
+| 闪退修复（P0） | 「立即本地转写」闪退根因：`SenseVoiceEngine` 传了 `assetManager` 走 sherpa-onnx `newFromAsset`，把文件系统绝对路径当 APK assets 读 → native abort。改为 `OfflineRecognizer(config)`（文件版）后修复 |
+| 工具链（P1） | Kotlin 2.0.21 → **2.4.10**、KSP 2.3.12（独立版本线）、AGP 9.1.1、Gradle 9.7.1（dist 已入 `.gradle-home/dist`）、Hilt 2.60.1、Room 2.8.5、**androidx Compose 1.12.1**（= JB Compose 1.12.0 对应版）、compileSdk 37。AGP 9 内置 Kotlin，不再应用 `kotlin-android` 插件；`kotlinOptions` DSL 迁移到 `compilerOptions` |
+| 液态玻璃（P2） | 删除 vendored `com/kyant/backdrop/**`（37 文件），改用 Maven Central 正版 **`io.github.kyant0:backdrop-android:2.0.1` + `shapes-android:1.2.1`**（Apache-2.0）。Dock 重写为官方 LiquidBottomTabs 模式（`rememberCombinedBackdrop` 玻璃上玻璃）；`liquidGlassSurface` 移除 2.0 已无的 `exportedBackdrop`；全 App 换 Shapes 连续曲率圆角 |
+| UI/UX（P3） | iOS 风格组件升级：EchoRow 图标芯片、EchoSegmented 滑动药丸、HeroRecallButton 重设计（径向渐变+强调色环+按压回弹）、记忆卡 AI 摘要胶囊、全局触感反馈（行点击/开关/分段/Dock/回溯）、导航 iOS push 转场 |
+| 门禁 | `testDebugUnitTest`（69 项）+ `assembleDebug` + `assembleRelease`（R8）全绿 |
+
 以下环境适配不属于产品偏差，但影响构建（已固化在 `build.ps1` 与 `.gradle-home/gradle.properties`）：
 
 1. 运行环境禁止写工作区外目录 → `GRADLE_USER_HOME`、`ANDROID_USER_HOME`、`user.home` 全部重定向进仓库
