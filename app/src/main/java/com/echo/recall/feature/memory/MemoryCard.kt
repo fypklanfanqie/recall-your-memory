@@ -1,12 +1,15 @@
 package com.echo.recall.feature.memory
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
@@ -39,10 +42,10 @@ fun MemoryCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = com.kyant.shapes.RoundedRectangle(16.dp),
         elevation = 6.dp,
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 13.dp, bottom = 13.dp)) {
             Text(
                 text = TimeFormat.friendly(memory.createdAt),
                 style = EchoType.headline,
@@ -74,14 +77,31 @@ fun MemoryCard(
                 )
             }
             memory.summary?.takeIf { it.isNotBlank() }?.let { summary ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "AI 摘要：$summary",
-                    style = EchoType.footnote,
-                    color = colors.secondaryLabel,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(9.dp))
+                        .background(colors.accent.copy(alpha = 0.08f))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                ) {
+                    Column {
+                        Text(
+                            text = "AI 摘要",
+                            style = EchoType.caption,
+                            color = colors.accent,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = summary,
+                            style = EchoType.footnote,
+                            color = colors.secondaryLabel,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
         IconButton(

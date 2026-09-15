@@ -1,9 +1,15 @@
 package com.echo.recall.nav
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -20,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -110,16 +118,26 @@ fun EchoNavHost(
                     dark = dark,
                     backgroundImagePath = settings.backgroundImagePath,
                 ) {
+                    // 内容全高滚动、延伸到 Dock 底下（图二式「包围」）；
+                    // 只保留状态栏顶部留白，底部不再截断——各页列表用 contentPadding 避开 Dock。
                     Scaffold(
                         containerColor = Color.Transparent,
-                        bottomBar = { Spacer(Modifier.height(86.dp)) },
                     ) { innerPadding ->
                         NavHost(
                             navController = navController,
                             startDestination = EchoTab.MEMORY.route,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(innerPadding),
+                                .padding(top = innerPadding.calculateTopPadding()),
+                            // iOS 风格转场：推进时新页自右滑入淡入，退出页淡出；返回反向
+                            enterTransition = {
+                                slideInHorizontally(animationSpec = tween(320)) { it / 3 } + fadeIn(tween(240))
+                            },
+                            exitTransition = { fadeOut(tween(180)) },
+                            popEnterTransition = { fadeIn(tween(240)) },
+                            popExitTransition = {
+                                slideOutHorizontally(animationSpec = tween(300)) { it / 3 } + fadeOut(tween(200))
+                            },
                         ) {
                             composable(EchoTab.MEMORY.route) {
                                 MemoryHomeScreen(onOpenMemory = { id ->
@@ -185,10 +203,12 @@ fun EchoNavHost(
                 }
             },
             overlay = {
+                val haptic = LocalHapticFeedback.current
                 GlassDock(
                     items = EchoTab.entries,
                     currentRoute = currentRoute,
                     onSelect = { tab ->
+                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
                         if (currentRoute != tab.route) {
                             navController.navigate(tab.route) {
                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -197,7 +217,9 @@ fun EchoNavHost(
                             }
                         }
                     },
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding(),
                 )
             },
         )

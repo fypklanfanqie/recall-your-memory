@@ -1,4 +1,4 @@
-﻿package com.echo.recall.feature.settings
+package com.echo.recall.feature.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +32,7 @@ import com.echo.recall.core.data.settings.ThemeMode
 import com.echo.recall.core.data.settings.VadSensitivity
 import com.echo.recall.core.designsystem.component.EchoRow
 import com.echo.recall.core.designsystem.component.EchoSegmented
+import com.echo.recall.core.designsystem.component.EchoSegmentedRow
 import com.echo.recall.core.designsystem.component.EchoSliderRow
 import com.echo.recall.core.designsystem.component.EchoSwitchRow
 import com.echo.recall.core.designsystem.component.ScreenHeader
@@ -101,16 +102,12 @@ fun SettingsScreen(
                 valueLabel = settings.windowLabel(),
                 onValueChange = viewModel::setWindowMinutes,
             )
-            EchoRow(
+            EchoSegmentedRow(
                 title = stringResource(R.string.settings_vad),
                 subtitle = "人声检测灵敏度越高越容易触发记录",
-                trailing = {
-                    EchoSegmented(
-                        options = vadLabels,
-                        selectedIndex = settings.vadSensitivity.ordinal,
-                        onSelect = { viewModel.setVadSensitivity(VadSensitivity.entries[it]) },
-                    )
-                },
+                options = vadLabels,
+                selectedIndex = settings.vadSensitivity.ordinal,
+                onSelect = { viewModel.setVadSensitivity(VadSensitivity.entries[it]) },
             )
         }
 
@@ -141,17 +138,13 @@ fun SettingsScreen(
 
         SectionLabel(stringResource(R.string.settings_section_appearance))
         SectionCard {
-            EchoRow(
+            EchoSegmentedRow(
                 icon = Icons.Rounded.WaterDrop,
                 title = stringResource(R.string.settings_liquid_glass),
                 subtitle = "半透明最省电 · 毛玻璃仅模糊 · 液态玻璃完整折射",
-                trailing = {
-                    EchoSegmented(
-                        options = glassModeLabels,
-                        selectedIndex = GlassMode.entries.indexOf(resolved),
-                        onSelect = { viewModel.setGlassMode(GlassMode.entries[it].name) },
-                    )
-                },
+                options = glassModeLabels,
+                selectedIndex = GlassMode.entries.indexOf(resolved),
+                onSelect = { viewModel.setGlassMode(GlassMode.entries[it].name) },
             )
             if (resolved != GlassMode.PLAIN) {
                 EchoSliderRow(
@@ -201,16 +194,12 @@ fun SettingsScreen(
                 valueLabel = "${(settings.glassTint * 100).roundToInt()}%",
                 onValueChange = viewModel::setGlassTint,
             )
-            EchoRow(
+            EchoSegmentedRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.settings_theme),
-                trailing = {
-                    EchoSegmented(
-                        options = themeLabels,
-                        selectedIndex = settings.themeMode.ordinal,
-                        onSelect = { viewModel.setThemeMode(ThemeMode.entries[it]) },
-                    )
-                },
+                options = themeLabels,
+                selectedIndex = settings.themeMode.ordinal,
+                onSelect = { viewModel.setThemeMode(ThemeMode.entries[it]) },
             )
         }
 
