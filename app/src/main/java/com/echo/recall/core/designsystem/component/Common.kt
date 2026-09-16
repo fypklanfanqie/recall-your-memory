@@ -487,21 +487,10 @@ fun HeroRecallButton(
 ) {
     val colors = LocalEchoColors.current
     val haptic = LocalHapticFeedback.current
-    val transition = rememberInfiniteTransition(label = "heroPulse")
-    val pulse by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (enabled) 1.03f else 1f,
-        animationSpec = infiniteRepeatable(tween(1800), RepeatMode.Reverse),
-        label = "heroPulseValue",
-    )
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = when {
-            pressed -> 0.955f
-            enabled -> pulse
-            else -> 1f
-        },
+        targetValue = if (pressed) 0.955f else 1f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
         label = "heroScale",
     )
