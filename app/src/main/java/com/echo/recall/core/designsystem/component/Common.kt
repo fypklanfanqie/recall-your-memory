@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
@@ -476,7 +477,7 @@ fun EchoEmptyState(
     }
 }
 
-/** 首页英雄按钮：回溯记忆（径向渐变 + 强调色环 + 按压回弹） */
+/** 首页回溯操作条：横向胶囊（图标芯片 + 标题/副标题 + 圆形箭头） */
 @Composable
 fun HeroRecallButton(
     label: String,
@@ -490,8 +491,8 @@ fun HeroRecallButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.955f else 1f,
-        animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 420f),
         label = "heroScale",
     )
 
@@ -499,28 +500,27 @@ fun HeroRecallButton(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(168.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(72.dp)
                 .scale(scale)
                 .shadow(
-                    elevation = 26.dp,
-                    shape = CircleShape,
-                    ambientColor = colors.accent.copy(alpha = 0.30f),
-                    spotColor = colors.accent.copy(alpha = 0.38f),
+                    elevation = 18.dp,
+                    shape = Capsule(),
+                    ambientColor = colors.accent.copy(alpha = 0.28f),
+                    spotColor = colors.accent.copy(alpha = 0.34f),
                 )
-                .clip(CircleShape)
+                .clip(Capsule())
                 .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            colors.accent.copy(alpha = if (enabled) 0.16f else 0.06f),
-                            colors.surface,
-                        ),
+                    Brush.linearGradient(
+                        listOf(colors.accent.copy(alpha = if (enabled) 0.13f else 0.06f), colors.surface),
                     ),
                 )
                 .border(
                     border = BorderStroke(1.dp, Brush.linearGradient(listOf(colors.glassHighlight, colors.separator))),
-                    shape = CircleShape,
+                    shape = Capsule(),
                 )
                 .clickable(
                     interactionSource = interaction,
@@ -529,42 +529,57 @@ fun HeroRecallButton(
                 ) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onClick()
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .clip(CircleShape)
-                        .background(colors.accent.copy(alpha = if (enabled) 0.15f else 0.07f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.History,
-                        contentDescription = null,
-                        tint = if (enabled) colors.accent else colors.tertiaryLabel,
-                        modifier = Modifier.size(30.dp),
-                    )
                 }
-                Spacer(Modifier.height(10.dp))
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(colors.accent.copy(alpha = if (enabled) 0.16f else 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.History,
+                    contentDescription = null,
+                    tint = if (enabled) colors.accent else colors.tertiaryLabel,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
                     style = EchoType.headline,
                     color = if (enabled) colors.label else colors.tertiaryLabel,
-                    textAlign = TextAlign.Center,
+                )
+                if (hint != null) {
+                    Spacer(Modifier.height(1.dp))
+                    Text(
+                        text = hint,
+                        style = EchoType.footnote,
+                        color = colors.secondaryLabel,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(colors.accent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
                 )
             }
-        }
-        if (hint != null) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = hint,
-                style = EchoType.footnote,
-                color = colors.secondaryLabel,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp),
-            )
         }
     }
 }
