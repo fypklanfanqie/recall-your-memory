@@ -3,6 +3,7 @@ package com.echo.recall.feature.notes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -85,7 +86,7 @@ fun NotesScreen(viewModel: NotesViewModel = hiltViewModel()) {
 
     val empty = pinned.isEmpty() && others.isEmpty()
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(bottom = 8.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 108.dp)) {
         item {
             ScreenHeader(
                 title = "备忘",

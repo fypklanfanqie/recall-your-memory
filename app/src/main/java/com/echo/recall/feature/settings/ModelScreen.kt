@@ -72,7 +72,7 @@ fun ModelScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState()).padding(bottom = 96.dp),
     ) {
         Row(
             modifier = Modifier

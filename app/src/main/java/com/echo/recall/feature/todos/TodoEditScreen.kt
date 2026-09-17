@@ -93,7 +93,7 @@ internal fun TodoEditScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState()).padding(bottom = 96.dp)
             .padding(bottom = 28.dp),
     ) {
         // ---- 页头：返回 / 标题 / 删除 ----

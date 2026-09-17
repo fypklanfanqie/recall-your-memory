@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -110,7 +111,7 @@ fun TodosScreen(viewModel: TodosViewModel = hiltViewModel()) {
         viewModel.add(text)
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(bottom = 8.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 108.dp)) {
         item { ScreenHeader(title = "待办", subtitle = tally(counts)) }
 
         item {

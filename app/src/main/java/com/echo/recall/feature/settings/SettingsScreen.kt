@@ -77,7 +77,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState()).padding(bottom = 96.dp),
     ) {
         ScreenHeader(title = stringResource(R.string.settings_title))
 

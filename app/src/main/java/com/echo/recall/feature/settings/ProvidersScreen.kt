@@ -63,7 +63,7 @@ fun ProvidersScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState()).padding(bottom = 96.dp),
     ) {
         Row(
             modifier = Modifier
@@ -272,12 +272,12 @@ private fun ModelChip(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         elevation = if (selected) 8.dp else 2.dp,
-        tint = if (selected) colors.accent.copy(alpha = 0.22f) else null,
+        tint = if (selected) colors.accent else null,
     ) {
         Text(
             text = label,
             style = EchoType.caption,
-            color = if (selected) colors.accent else colors.label,
+            color = if (selected) androidx.compose.ui.graphics.Color.White else colors.label,
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
         )
