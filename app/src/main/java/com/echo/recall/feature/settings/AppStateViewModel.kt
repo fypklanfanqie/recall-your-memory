@@ -18,6 +18,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.util.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntSize
 import javax.inject.Inject
 
 /**
@@ -90,5 +95,34 @@ class AppStateViewModel @Inject constructor(
             if (!oldPath.isNullOrBlank()) runCatching { File(oldPath).delete() }
         }
         settingsRepository.setBackgroundImage("")
+    }
+
+    /** 保存裁剪结果：按所见导出位图 → JPEG → 记录路径（复用唯一文件名逻辑） */
+    suspend fun saveCroppedWallpaper(
+        frame: IntSize,
+        zoom: Float,
+        pan: androidx.compose.ui.geometry.Offset,
+        src: Bitmap,
+    ): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val out = Bitmap.createBitmap(
+                frame.width.coerceAtLeast(1),
+                frame.height.coerceAtLeast(1),
+                Bitmap.Config.ARGB_8888,
+            )
+            val canvas = Canvas(out)
+            canvas.drawColor(android.graphics.Color.BLACK)
+            canvas.translate(pan.x, pan.y)
+            canvas.scale(zoom, zoom)
+            canvas.drawBitmap(src, 0f, 0f, null)
+            val oldPath = settingsRepository.settings.first().backgroundImagePath
+            val dest = File(context.filesDir, "background_${System.currentTimeMillis()}.jpg")
+            java.io.FileOutputStream(dest).use { out.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            if (!oldPath.isNullOrBlank() && oldPath != dest.absolutePath) {
+                runCatching { File(oldPath).delete() }
+            }
+            settingsRepository.setBackgroundImage(dest.absolutePath)
+            true
+        }.getOrDefault(false)
     }
 }
