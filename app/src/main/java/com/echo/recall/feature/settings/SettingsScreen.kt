@@ -214,8 +214,8 @@ fun SettingsScreen(
             )
             EchoRow(
                 icon = Icons.Rounded.RestartAlt,
-                title = "恢复默认渐变",
-                subtitle = "回到内置的柔和光斑背景",
+                title = "删除壁纸（恢复默认渐变）",
+                subtitle = "删除当前壁纸文件并回到内置的柔和光斑背景",
                 showChevron = true,
                 onClick = viewModel::clearBackgroundImage,
             )

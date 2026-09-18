@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,19 +63,32 @@ class AppStateViewModel @Inject constructor(
 
     // ---- 背景图片 ----
 
-    /** 把 SAF 选中的图片拷入 filesDir/background.jpg 并记录路径 */
+    /** 把 SAF 选中的图片拷入 filesDir（唯一文件名，确保换图后 UI 重新加载），删除旧文件并记录新路径 */
     fun setBackgroundImage(uri: Uri) = viewModelScope.launch {
+        val oldPath = settingsRepository.settings.first().backgroundImagePath
         val path = withContext(Dispatchers.IO) {
             runCatching {
-                val dest = File(context.filesDir, "background.jpg")
+                val dest = File(context.filesDir, "background_${System.currentTimeMillis()}.jpg")
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     dest.outputStream().use { output -> input.copyTo(output) }
                 } ?: return@runCatching null
                 dest.absolutePath
             }.getOrNull()
         }
-        if (path != null) settingsRepository.setBackgroundImage(path)
+        if (path != null) {
+            if (!oldPath.isNullOrBlank() && oldPath != path) {
+                runCatching { File(oldPath).delete() }
+            }
+            settingsRepository.setBackgroundImage(path)
+        }
     }
 
-    fun clearBackgroundImage() = viewModelScope.launch { settingsRepository.setBackgroundImage("") }
+    /** 删除自定义壁纸：清记录 + 删文件，回到内置渐变 */
+    fun clearBackgroundImage() = viewModelScope.launch {
+        val oldPath = settingsRepository.settings.first().backgroundImagePath
+        withContext(Dispatchers.IO) {
+            if (!oldPath.isNullOrBlank()) runCatching { File(oldPath).delete() }
+        }
+        settingsRepository.setBackgroundImage("")
+    }
 }

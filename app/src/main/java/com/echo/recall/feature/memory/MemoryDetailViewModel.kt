@@ -158,7 +158,15 @@ class MemoryDetailViewModel @Inject constructor(
         viewModelScope.launch {
             val title = transcript.lineSequence().firstOrNull { it.isNotBlank() }
                 ?.trim()?.take(30) ?: "记忆转写"
-            val count = todoRepository.createMany(listOf(title), notes = transcript)
+            val summary = memory.value?.summary
+            val notes = buildString {
+                append(transcript)
+                if (!summary.isNullOrBlank()) {
+                    append("\n\n—— AI 总结 ——\n")
+                    append(summary)
+                }
+            }
+            val count = todoRepository.createMany(listOf(title), notes = notes)
             _todoUi.value = TodoExtractUi.Done(count)
             _events.tryEmit(DetailEvent.Message("已把转写文字存入待办"))
         }

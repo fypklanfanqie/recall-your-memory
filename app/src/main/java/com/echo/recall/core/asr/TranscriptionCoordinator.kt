@@ -111,6 +111,16 @@ class TranscriptionCoordinator @Inject constructor(
                     }
                     updated += segment.copy(text = text?.takeIf { it.isNotBlank() })
                     _progress.update { it + (memoryId to ((index + 1) * 100 / segments.size)) }
+                    // 逐段流式落库：UI 立即看到已转好的片段，不等整篇完成
+                    memoryRepository.setTranscription(
+                        id = memoryId,
+                        transcript = updated.mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+                            .joinToString("\n"),
+                        segments = updated.toList(),
+                        language = language,
+                        emotion = emotion,
+                        state = TranscribeState.RUNNING,
+                    )
                 }
 
                 val transcript = updated.mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
