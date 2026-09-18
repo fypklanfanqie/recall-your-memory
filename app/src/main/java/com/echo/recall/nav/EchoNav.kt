@@ -59,6 +59,7 @@ import com.echo.recall.feature.settings.KeepAliveScreen
 import com.echo.recall.feature.settings.ModelScreen
 import com.echo.recall.feature.settings.ProvidersScreen
 import com.echo.recall.feature.settings.SettingsScreen
+import com.echo.recall.feature.settings.WallpaperCropScreen
 import com.echo.recall.feature.todos.TodosScreen
 
 /** Dock 五个大功能 */
@@ -84,10 +85,14 @@ object EchoRoutes {
     const val PROVIDERS = "providers"
     const val KEEPALIVE = "keepalive"
     const val ABOUT = "about"
+    const val WALLPAPER_CROP_ARG = "cropUri"
+    const val WALLPAPER_CROP = "wallpaperCrop/{$WALLPAPER_CROP_ARG}"
 
     fun memoryDetail(id: String): String = "memory/$id"
 
     fun memoryChat(id: String): String = "memory/$id/chat"
+
+    fun wallpaperCrop(cropUri: android.net.Uri): String = "wallpaperCrop/${android.net.Uri.encode(cropUri.toString())}"
 }
 
 @Composable
@@ -159,7 +164,26 @@ fun EchoNavHost(
                                     onOpenProviders = { navController.navigate(EchoRoutes.PROVIDERS) },
                                     onOpenKeepAlive = { navController.navigate(EchoRoutes.KEEPALIVE) },
                                     onOpenAbout = { navController.navigate(EchoRoutes.ABOUT) },
+                                    onOpenWallpaperCrop = { cropUri ->
+                                        navController.navigate(EchoRoutes.wallpaperCrop(cropUri))
+                                    },
                                 )
+                            }
+                            composable(
+                                route = EchoRoutes.WALLPAPER_CROP,
+                                arguments = listOf(
+                                    navArgument(EchoRoutes.WALLPAPER_CROP_ARG) { type = NavType.StringType },
+                                ),
+                            ) { entry ->
+                                val cropUri = entry.arguments
+                                    ?.getString(EchoRoutes.WALLPAPER_CROP_ARG)
+                                    ?.let { android.net.Uri.parse(it) }
+                                if (cropUri != null) {
+                                    WallpaperCropScreen(
+                                        uri = cropUri,
+                                        onBack = { navController.popBackStack() },
+                                    )
+                                }
                             }
                             composable(EchoRoutes.KEEPALIVE) {
                                 KeepAliveScreen(onBack = { navController.popBackStack() })

@@ -1,5 +1,6 @@
 package com.echo.recall.feature.settings
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ fun SettingsScreen(
     onOpenProviders: () -> Unit = {},
     onOpenKeepAlive: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
+    onOpenWallpaperCrop: (Uri) -> Unit = {},
 ) {
     val colors = LocalEchoColors.current
     val context = LocalContext.current
@@ -72,7 +74,7 @@ fun SettingsScreen(
     )
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let(viewModel::setBackgroundImage) }
+    ) { uri -> uri?.let(onOpenWallpaperCrop) }
 
     Column(
         modifier = Modifier
