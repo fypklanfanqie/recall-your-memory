@@ -1,36 +1,54 @@
 # 回声 Echo（recall-your-memory）
 
-![状态](https://img.shields.io/badge/%E7%8A%B6%E6%80%81-%E6%97%A9%E6%9C%9F%E5%BC%80%E5%8F%91-orange) ![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-0.1.0--alpha-blue) ![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Android%208.0%2B-green)
-
-> ⚠️ **本项目仍处于早期开发阶段（Early Stage）**
-> 核心链路已可跑通并经真机验证，但**接口、数据结构与功能形态随时可能变动**，不适合作为日常依赖或生产环境使用。
-> ⚠️ **This project is in an early stage of development** — APIs and data models may change at any time.
+![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-0.2.0-blue) ![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Android%208.0%2B-green) ![测试](https://img.shields.io/badge/%E5%8D%95%E6%B5%8B-69%20%E9%A1%B9%E5%85%A8%E7%BB%BF-success)
 
 > 环境声环形录音 + 人声检测 + 本地转写 + 云端 LLM 总结问答的 Android 记忆回溯 App。
-> iOS 设计语言 · 底部 Dock 五大功能 · 液态玻璃可切换。
+> iOS 设计语言 · 液态玻璃 UI · 底部 Dock 五大功能 · 本地转写全程离线。
 
 完整产品与技术方案见 **[PLAN.md](PLAN.md)**。
 
+## 界面预览
+
+| 记忆回溯 | 收藏 | 待办 |
+|:---:|:---:|:---:|
+| ![记忆回溯](docs/screenshots/home.jpg) | ![收藏](docs/screenshots/favorites.jpg) | ![待办](docs/screenshots/todos.jpg) |
+| **备忘** | **设置** | **液态玻璃调参** |
+| ![备忘](docs/screenshots/notes.jpg) | ![设置](docs/screenshots/settings.jpg) | ![液态玻璃](docs/screenshots/glass.jpg) |
+
+<details>
+<summary>本地语音模型管理</summary>
+
+![本地语音模型](docs/screenshots/model.jpg)
+
+</details>
+
+## 功能
+
+- **回声聆听**：后台常驻轻量监听（silero-vad），只在有人声时写入内存环形缓冲，保留最近 0.5–5 分钟（可调），取走即清空
+- **一键回溯**：点击即取出窗口内的声音生成「记忆」，本地 SenseVoice 离线转写（逐段实时上屏），自动加标点
+- **AI 联动**：记忆总结 / 追问（流式 SSE）、一键提取待办（转写全文 + AI 总结直接写入待办）
+- **收藏 / 待办 / 备忘**：收藏永久保留，未收藏 7 天自动清理
+- **液态玻璃 UI**：正版 [Kyant0 Backdrop](https://github.com/Kyant0/AndroidLiquidGlass) 实时折射（Dock / 回溯按钮 / 悬浮药丸），模糊 / 折射 / 色散 / 高光 / 染色全参数可调，三档降级（液态玻璃 / 毛玻璃 / 半透明）
+- **壁纸**：自定义壁纸 + 内置裁剪（拖动 / 双指缩放取景），玻璃折射效果随壁纸呈现
+- **保活**：前台服务 + 清后台自愈 + 快捷磁贴 + 通知一键恢复 + 分 ROM 保活引导
+
 ---
 
-## 当前进度
-
-> 项目整体处于**早期开发阶段**：M0–M5 里程碑虽已验证通过，仅代表核心链路可用，后续仍会有大量调整与重构。
+## 里程碑
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| M0 | 工程脚手架、设计系统、Dock 导航、设置壳 | ✅ 完成（编译通过 + APK 产出） |
-| M1 | 录音引擎：前台服务 + silero-vad + 环形缓冲 + 回溯 + 播放 | ✅ 完成（单测 11 项全绿） |
-| M2 | 本地转写：模型管理（多镜像/续传/SHA256）+ SenseVoice 批转写 + 时间戳字幕 | ✅ 完成 |
-| M3 | 云端 LLM：8 家供应商 + 模型列表拉取 + 记忆总结/追问 + 备忘润色 | ✅ 完成（单测 18 项全绿） |
-| M4 | 收藏 / 待办 / 备忘交互 + 液态玻璃 UI + 7 天清理 | ✅ 完成 |
-| M5 | 保活引导、快捷磁贴、续航实测、崩溃恢复、签名 APK | ✅ 完成（真机实测项见下） |
+| M0 | 工程脚手架、设计系统、Dock 导航、设置壳 | ✅ |
+| M1 | 录音引擎：前台服务 + silero-vad + 环形缓冲 + 回溯 + 播放 | ✅ |
+| M2 | 本地转写：模型管理（多镜像/续传/SHA256）+ SenseVoice 批转写 + 时间戳字幕 | ✅ |
+| M3 | 云端 LLM：8 家供应商 + 模型列表拉取 + 记忆总结/追问 + 备忘润色 | ✅ |
+| M4 | 收藏 / 待办 / 备忘交互 + 液态玻璃 UI + 7 天清理 | ✅ |
+| M5 | 保活引导、快捷磁贴、续航实测、崩溃恢复、签名 APK | ✅ |
+| **R1** | UI/UX 与液态玻璃重构（详见 [PLAN.md](PLAN.md) §14.1） | ✅ |
 
 **验证门禁（全部通过）**：`testDebugUnitTest` **69 项测试 / 0 失败** · `assembleDebug` 通过 · `assembleRelease` 通过（R8 混淆 + 资源压缩，签名验证通过）
 
-**R1 UI/UX 与液态玻璃重构（2026-09，详见 PLAN.md §14.1）**：修复「立即本地转写」native 闪退（sherpa-onnx 构造参数误用）；工具链升级 Kotlin 2.4.10 / AGP 9.1.1 / Gradle 9.7.1 / Compose 1.12.1；液态玻璃删除 vendored 源码、换正版 **Kyant0 backdrop-android 2.0.1 + Shapes 1.2.1**，Dock 换官方 2.0 玻璃上玻璃模式；iOS 组件库（图标芯片/动画分段/英雄按钮重设计）、全局触感与 push 转场。
-
-**已实现的 v1.5 联动**：记忆详情页可「**提取待办**」——用云端 LLM 从这段录音的转写里抽出待办，一键写进待办列表（只发送文字）。
+**R1 重构要点（2026-09）**：修复「立即本地转写」native 闪退（sherpa-onnx 构造参数误用）；工具链升级 Kotlin 2.4.10 / AGP 9.1.1 / Gradle 9.7.1 / Compose 1.12.1；液态玻璃换正版 **Kyant0 backdrop-android 2.0.1 + Shapes 1.2.1**（Dock 玻璃上玻璃滑块可拖动换页）；iOS 组件库、全局触感与 push 转场；清后台自愈保活；回溯转写逐段流式上屏；内置壁纸裁剪。
 
 > 真机验收清单见 [docs/VERIFY.md](docs/VERIFY.md)（可用 `tools/verify-device.ps1` 自动跑一遍），交付与安装说明见 [docs/DELIVERY.md](docs/DELIVERY.md)。
 > 液态玻璃现使用正版 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（backdrop 2.0.1）+ [Kyant0/Shapes](https://github.com/Kyant0/Shapes)（1.2.1）；升级记录见 [PLAN.md](PLAN.md) §14.1。
