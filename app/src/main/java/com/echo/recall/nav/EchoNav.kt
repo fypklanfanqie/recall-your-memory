@@ -228,23 +228,26 @@ fun EchoNavHost(
             },
             overlay = {
                 val haptic = LocalHapticFeedback.current
-                GlassDock(
-                    items = EchoTab.entries,
-                    currentRoute = currentRoute,
-                    onSelect = { tab ->
-                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        if (currentRoute != tab.route) {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                // 裁剪壁纸为全屏编辑页，不显示 Dock
+                if (currentRoute != EchoRoutes.WALLPAPER_CROP) {
+                    GlassDock(
+                        items = EchoTab.entries,
+                        currentRoute = currentRoute,
+                        onSelect = { tab ->
+                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            if (currentRoute != tab.route) {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding(),
-                )
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding(),
+                    )
+                }
             },
         )
     }

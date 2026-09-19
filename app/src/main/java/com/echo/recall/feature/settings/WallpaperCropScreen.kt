@@ -2,7 +2,6 @@ package com.echo.recall.feature.settings
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -12,10 +11,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -50,7 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 壁纸裁剪：拖动 + 双指缩放取景，确认后按所见导出 */
+/** 壁纸裁剪：图片以 cover 方式铺满取景框（框即实际壁纸区域），拖动 + 双指缩放取景，确认后按所见导出 */
 @Composable
 fun WallpaperCropScreen(
     uri: Uri,
@@ -82,6 +81,21 @@ fun WallpaperCropScreen(
         }
     }
 
+    val bmp = src
+    // base = cover 缩放（保证铺满取景框，无黑边）；display = base * zoom
+    val baseScale = if (bmp != null && frame.width > 0 && frame.height > 0) {
+        maxOf(frame.width.toFloat() / bmp.width, frame.height.toFloat() / bmp.height)
+    } else {
+        0f
+    }
+    val displayScale = baseScale * zoom
+
+    fun clampPan(b: Bitmap, s: Float): Offset {
+        val maxX = maxOf(0f, (b.width * s - frame.width) / 2f)
+        val maxY = maxOf(0f, (b.height * s - frame.height) / 2f)
+        return Offset(pan.x.coerceIn(-maxX, maxX), pan.y.coerceIn(-maxY, maxY))
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -95,20 +109,23 @@ fun WallpaperCropScreen(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(9f / 19.5f)
-                    .onSizeChanged { frame = it }
+                    .fillMaxSize()
+                    .onSizeChanged {
+                        if (it.width != frame.width || it.height != frame.height) {
+                            frame = it
+                            zoom = 1f
+                            pan = Offset.Zero
+                        }
+                    }
                     .background(Color(0xFF111111)),
                 contentAlignment = Alignment.Center,
             ) {
-                val bmp = src
-                if (bmp != null) {
+                if (bmp != null && frame.width > 0 && baseScale > 0f) {
                     Image(
                         bitmap = bmp.asImageBitmap(),
                         contentDescription = null,
@@ -116,18 +133,17 @@ fun WallpaperCropScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                scaleX = zoom
-                                scaleY = zoom
+                                scaleX = displayScale
+                                scaleY = displayScale
                                 translationX = pan.x
                                 translationY = pan.y
                             }
-                            .pointerInput(bmp, frame) {
+                            .pointerInput(bmp, frame.width, frame.height) {
+                                // detectTransformGestures 同时支持单指拖动（pan）与双指缩放
                                 detectTransformGestures { _, panAdd, zoomAdd, _ ->
                                     zoom = (zoom * zoomAdd).coerceIn(1f, 6f)
                                     pan += panAdd
-                                    val maxX = maxOf(0f, (bmp.width * zoom - frame.width) / 2f)
-                                    val maxY = maxOf(0f, (bmp.height * zoom - frame.height) / 2f)
-                                    pan = Offset(pan.x.coerceIn(-maxX, maxX), pan.y.coerceIn(-maxY, maxY))
+                                    pan = clampPan(bmp, displayScale)
                                 }
                             },
                     )
@@ -137,19 +153,22 @@ fun WallpaperCropScreen(
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("拖动 / 双指缩放取景", color = Color(0x99FFFFFF), modifier = Modifier.weight(1f))
             Button(
-                enabled = !saving && src != null && frame.width > 0,
+                enabled = !saving && bmp != null && frame.width > 0,
                 onClick = {
-                    val bmp = src ?: return@Button
+                    val b = bmp ?: return@Button
                     saving = true
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     kotlinx.coroutines.MainScope().launch {
-                        val ok = viewModel.saveCroppedWallpaper(frame, zoom, pan, bmp)
+                        val ok = viewModel.saveCroppedWallpaper(frame, displayScale, pan, b)
                         saving = false
                         if (ok) onBack()
                     }
@@ -158,6 +177,6 @@ fun WallpaperCropScreen(
                 Text(if (saving) "保存中…" else "确认使用")
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
     }
 }
