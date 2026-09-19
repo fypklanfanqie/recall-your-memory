@@ -34,3 +34,6 @@ local.properties
 /.idea/
 .DS_Store
 /.android/
+
+# 指向本机 Gradle 发行版的 wrapper 配置（机器相关，不入库）
+/gradle/wrapper/
