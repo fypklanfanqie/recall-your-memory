@@ -9,11 +9,11 @@
 
 ## 界面预览
 
-| 记忆回溯 | 收藏 | 待办 |
+| 收藏 | 待办 | 备忘 |
 |:---:|:---:|:---:|
-| ![记忆回溯](docs/screenshots/home.jpg) | ![收藏](docs/screenshots/favorites.jpg) | ![待办](docs/screenshots/todos.jpg) |
-| **备忘** | **设置** | **液态玻璃调参** |
-| ![备忘](docs/screenshots/notes.jpg) | ![设置](docs/screenshots/settings.jpg) | ![液态玻璃](docs/screenshots/glass.jpg) |
+| ![收藏](docs/screenshots/favorites.jpg) | ![待办](docs/screenshots/todos.jpg) | ![备忘](docs/screenshots/notes.jpg) |
+| **液态玻璃调参** | **设置** | |
+| ![液态玻璃](docs/screenshots/glass.jpg) | ![设置](docs/screenshots/settings.jpg) | |
 
 <details>
 <summary>本地语音模型管理</summary>
