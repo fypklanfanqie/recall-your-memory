@@ -75,6 +75,16 @@ class VadEngine(
         vad.reset()
     }
 
+    /**
+     * 告知 VAD「有 [durationMs] 毫秒的音频被永久跳过（从未喂入）」。
+     *
+     * 极致省电档会丢弃过老的静默帧；若不补偿，VAD 内部的采样计数会永久落后于真实时间，
+     * 导致后续片段的时间戳系统性偏早。这里把基准时间前移，保持映射对齐。
+     */
+    fun skipMs(durationMs: Long) {
+        if (durationMs > 0) baseMs += durationMs
+    }
+
     /** 喂入一帧（长度应为 windowSize），返回本次新闭合的片段 */
     fun accept(samples: FloatArray, nowMs: Long): List<ClosedSegment> {
         vad.acceptWaveform(samples)

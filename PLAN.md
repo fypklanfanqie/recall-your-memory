@@ -317,7 +317,6 @@ NoteEntity(id, title, content, createdAt, updatedAt, pinned, aiVersionsJson?)
 | 记忆问答记录 | 存库（chatJson） | **会话级**（离开页面即释放） | 降低库表复杂度；长期保存留待 v1.5 |
 
 ### 14.1 R1 UI/UX 与液态玻璃重构记录（2026-09）
-
 | 项 | 结论 |
 |----|------|
 | 闪退修复（P0） | 「立即本地转写」闪退根因：`SenseVoiceEngine` 传了 `assetManager` 走 sherpa-onnx `newFromAsset`，把文件系统绝对路径当 APK assets 读 → native abort。改为 `OfflineRecognizer(config)`（文件版）后修复 |
@@ -334,3 +333,23 @@ NoteEntity(id, title, content, createdAt, updatedAt, pinned, aiVersionsJson?)
 4. Kotlin 编译守护进程无法启动（写不了 `%LOCALAPPDATA%\kotlin`）→ `kotlin.compiler.execution.strategy=in-process`
 5. 内存受限（`-Xmx3072m` 触发过原生 OOM）→ 降到 1536m + 关闭并行 + workers.max=2
 6. Windows Schannel 不可用（curl/.NET 的 HTTPS 全部失败）→ 用 JVM 工具（`tools/Download.java`、`tools/HeadProbe.java`）做下载与探测；Gradle 走 JVM JSSE 不受影响
+
+### 14.2 v1.1 省电 / 触发 / 模型分级记录（2026-09）
+
+详细方案见 **[docs/PLAN-OPTIMIZATION.md](docs/PLAN-OPTIMIZATION.md)**。用户决策：默认「均衡」省电档（零丢音）、只上 3 档模型（砍 L4）、加能量+过零率过滤、全部实施。
+
+| 项 | 原计划 | 实际实现 | 原因 |
+|----|--------|----------|------|
+| 唤醒锁 | 灭屏用 PARTIAL_WAKE_LOCK 维持采集 | **只在「灭屏 + 聆听」时持有，且限时 10 分钟续租**；亮屏不持锁 | v1.0 无条件持锁 → AP 永远无法 suspend，是最伤的单项耗电。音频采集本身是唤醒源，无需常驻持锁 |
+| 省电折衷模式 | v2 计划「仅 VAD + 音频、转写延后」 | 实现为 **VAD_SKIP**：静默 >30s 跳过 VAD 推理，音频仍入原始环形缓冲，能量触发后**回灌**给 VAD | 回灌方案**零丢音**，只省推理算力 —— 比原计划「丢音频」的折衷更好，因此可以做成可选档而不牺牲体验 |
+| 触发门 | 单级（直接喂 VAD） | **两级**：自适应能量门（不达标不喂 VAD）+ 过零率/能量平稳度过滤 | 静默期 VAD 推理是主要 CPU 开销；两级门同时降误报 |
+| 非人声过滤强度 | 「滤掉电视/音乐」 | **有意做成召回优先**：中频纯音（440Hz，ZCR≈0.055）落在人声带内，**不拒绝**；只拒绝低频嗡鸣与宽带稳态噪声 | 靠过零率无法分开 440Hz 纯音与语音，强行调低阈值会误杀元音。误杀 = 用户记忆永久丢失，代价远大于漏过滤。更激进的过滤应在**转写后**用 SenseVoice 的 `event` 标签回标 |
+| 句首预滚 | 未计划 | **新增**：VAD 报出起点时补上起点前 400ms（`RawAudioRing` + `isSpeechDetected()` 上升沿抓取） | 修掉「第一个字被切掉」的体感问题 |
+| 模型档位 | 单模型 228MB 硬编码 | **3 档**：L1 Zipformer-14M **29MB** / L2 Paraformer-small **78MB** / L3 SenseVoice **228MB**；按 CPU 核心数 + 堆上限自动推荐 | 低端机下不动也用不了 228MB 模型 |
+| 模型下载源 | hf-mirror → huggingface | **hf-mirror → modelscope → huggingface** | 实测 ModelScope 上 `csukuangfj`/`k2-fsa`/`pkufool` 命名空间全部 404，但存在**第三方社区转存**且**逐字节一致**；作为独立境内兜底源，由强制 SHA-256 校验兜底供应链风险 |
+| 转写线程数 | 写死 2 | 随核心数伸缩（≤4核→2、6核→3、≥8核→4），**封顶 4** | 依据官方 RK3588 实测 RTF：1线程 0.436 → 4线程 0.175，之后收益递减而功耗线性上升 |
+| 引擎生命周期 | 每次转写新建 → 立即 release | **LRU 缓存 1 个引擎**，`onTrimMemory` 时释放 | 228MB 模型反复加载是秒级开销 |
+| 升级兼容 | — | v1.0 目录 `models/sense-voice` 与 v1.1 的 L3 `dirName` **完全相同** → 老用户已下载的 228MB 模型直接沿用，并**优先选中 L3** | 避免让老用户白下第二个模型 |
+| 门禁 | — | `testDebugUnitTest`（**141 项**）+ `assembleDebug` + `assembleRelease`（R8）全绿 | 单测从 69 → 141 项 |
+
+**未做 / 诚实边界**：麦克风硬件功耗无法通过上述手段降低（`AudioRecord` 活动即麦克风供电域开启），真正的大头是唤醒锁改造；省电百分比为设计目标，**需真机实测校准**，未实测前不写入 README 具体数字。

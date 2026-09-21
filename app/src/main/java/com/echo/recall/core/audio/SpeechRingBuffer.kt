@@ -23,6 +23,7 @@ class SpeechRingBuffer(
 
     private val segments = ArrayDeque<Segment>()
     private var cachedBytes = 0
+    private var cachedVoicedMs = 0L
 
     val size: Int
         @Synchronized get() = segments.size
@@ -35,6 +36,7 @@ class SpeechRingBuffer(
         if (segment.pcm.isEmpty()) return
         segments.addLast(segment)
         cachedBytes += segment.bytes
+        cachedVoicedMs += segment.durationMs
         enforceByteCap()
     }
 
@@ -43,7 +45,9 @@ class SpeechRingBuffer(
     fun trim(nowMs: Long, windowMs: Long) {
         val cutoff = nowMs - windowMs
         while (segments.isNotEmpty() && segments.first().endMs < cutoff) {
-            cachedBytes -= segments.removeFirst().bytes
+            val removed = segments.removeFirst()
+            cachedBytes -= removed.bytes
+            cachedVoicedMs -= removed.durationMs
         }
     }
 
@@ -56,6 +60,7 @@ class SpeechRingBuffer(
         val copy = segments.toList()
         segments.clear()
         cachedBytes = 0
+        cachedVoicedMs = 0L
         return copy
     }
 
@@ -63,15 +68,12 @@ class SpeechRingBuffer(
     fun clear() {
         segments.clear()
         cachedBytes = 0
+        cachedVoicedMs = 0L
     }
 
-    /** 窗口内累计人声时长 */
+    /** 窗口内累计人声时长（增量维护，O(1)） */
     @Synchronized
-    fun voicedMillis(): Long {
-        var total = 0L
-        for (s in segments) total += s.durationMs
-        return total
-    }
+    fun voicedMillis(): Long = cachedVoicedMs
 
     @Synchronized
     fun lastVoiceEndMs(): Long? = segments.lastOrNull()?.endMs
@@ -82,7 +84,9 @@ class SpeechRingBuffer(
     private fun enforceByteCap() {
         // 防御异常长语音：超出上限时淘汰最旧的段（至少保留一段）
         while (cachedBytes > maxBytes && segments.size > 1) {
-            cachedBytes -= segments.removeFirst().bytes
+            val removed = segments.removeFirst()
+            cachedBytes -= removed.bytes
+            cachedVoicedMs -= removed.durationMs
         }
     }
 

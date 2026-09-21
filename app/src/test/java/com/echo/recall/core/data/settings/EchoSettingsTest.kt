@@ -1,6 +1,7 @@
 package com.echo.recall.core.data.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EchoSettingsTest {
@@ -35,6 +36,43 @@ class EchoSettingsTest {
         assertEquals(ThemeMode.SYSTEM, defaults.themeMode)
         assertEquals(false, defaults.autoSummary)
         assertEquals(false, defaults.recordingEnabled)
+    }
+
+    @Test
+    fun `power profile defaults to balanced so no audio is lost`() {
+        // 用户决策：默认「均衡」（零丢音），极致省电必须是显式选择
+        assertEquals(PowerProfile.BALANCED, EchoSettings().powerProfile)
+    }
+
+    @Test
+    fun `power profile has exactly two levels`() {
+        assertEquals(listOf(PowerProfile.BALANCED, PowerProfile.SAVER), PowerProfile.entries.toList())
+    }
+
+    @Test
+    fun `trigger haptic is off by default`() {
+        // 震动会额外耗电，默认必须关
+        assertEquals(false, EchoSettings().triggerHaptic)
+    }
+
+    @Test
+    fun `asr model id starts empty so the device recommendation applies`() {
+        assertEquals("", EchoSettings().asrModelId)
+    }
+
+    @Test
+    fun `silence thresholds are ordered and sane`() {
+        // COOLDOWN 必须先于 DEEP 触发，否则状态机会跳过中间档
+        assertTrue(EchoSettings.SILENCE_COOLDOWN_MS < EchoSettings.SILENCE_DEEP_MS)
+        assertTrue(EchoSettings.SILENCE_COOLDOWN_MS > 0)
+        // 占空比 1:4 —— 停读必须明显长于读，否则省不下电
+        assertTrue(EchoSettings.SILENCE_DUTY_OFF_MS > EchoSettings.SILENCE_DUTY_ON_MS)
+    }
+
+    @Test
+    fun `duty cycle on window is about half a second`() {
+        assertEquals(512L, EchoSettings.SILENCE_DUTY_ON_MS)
+        assertEquals(1_536L, EchoSettings.SILENCE_DUTY_OFF_MS)
     }
 
     @Test

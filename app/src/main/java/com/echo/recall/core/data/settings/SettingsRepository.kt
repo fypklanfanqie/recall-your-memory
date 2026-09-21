@@ -23,6 +23,9 @@ class SettingsRepository @Inject constructor(
     private object Keys {
         val windowMinutes = floatPreferencesKey("window_minutes")
         val vadSensitivity = stringPreferencesKey("vad_sensitivity")
+        val powerProfile = stringPreferencesKey("power_profile")
+        val triggerHaptic = booleanPreferencesKey("trigger_haptic")
+        val asrModelId = stringPreferencesKey("asr_model_id")
         val glassMode = stringPreferencesKey("glass_mode")
         val legacyLiquidGlass = booleanPreferencesKey("liquid_glass")
         val themeMode = stringPreferencesKey("theme_mode")
@@ -45,6 +48,10 @@ class SettingsRepository @Inject constructor(
                 ?: EchoSettings.DEFAULT_WINDOW_MINUTES,
             vadSensitivity = prefs[Keys.vadSensitivity]?.let { runCatching { VadSensitivity.valueOf(it) }.getOrNull() }
                 ?: VadSensitivity.MEDIUM,
+            powerProfile = prefs[Keys.powerProfile]?.let { runCatching { PowerProfile.valueOf(it) }.getOrNull() }
+                ?: PowerProfile.BALANCED,
+            triggerHaptic = prefs[Keys.triggerHaptic] ?: false,
+            asrModelId = prefs[Keys.asrModelId] ?: "",
             glassMode = prefs[Keys.glassMode]
                 // 旧版布尔开关迁移：关 = 毛玻璃，开 = 液态玻璃
                 ?: (prefs[Keys.legacyLiquidGlass]?.let { if (it) "LIQUID" else "FROSTED" }
@@ -73,6 +80,18 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setVadSensitivity(value: VadSensitivity) {
         context.echoSettingsStore.edit { it[Keys.vadSensitivity] = value.name }
+    }
+
+    suspend fun setPowerProfile(value: PowerProfile) {
+        context.echoSettingsStore.edit { it[Keys.powerProfile] = value.name }
+    }
+
+    suspend fun setTriggerHaptic(enabled: Boolean) {
+        context.echoSettingsStore.edit { it[Keys.triggerHaptic] = enabled }
+    }
+
+    suspend fun setAsrModelId(id: String) {
+        context.echoSettingsStore.edit { it[Keys.asrModelId] = id }
     }
 
     suspend fun setGlassMode(mode: String) {

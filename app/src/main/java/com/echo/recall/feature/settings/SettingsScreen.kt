@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Image
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.echo.recall.R
 import com.echo.recall.core.data.settings.EchoSettings
+import com.echo.recall.core.data.settings.PowerProfile
 import com.echo.recall.core.data.settings.ThemeMode
 import com.echo.recall.core.data.settings.VadSensitivity
 import com.echo.recall.core.designsystem.component.EchoRow
@@ -68,6 +71,7 @@ fun SettingsScreen(
         stringResource(R.string.settings_theme_light),
         stringResource(R.string.settings_theme_dark),
     )
+    val powerLabels = listOf("均衡", "极致省电")
     val glassModeLabels = listOf("半透明", "毛玻璃", "液态玻璃")
     val resolved = com.echo.recall.core.designsystem.glass.resolveGlassMode(
         com.echo.recall.core.designsystem.glass.GlassMode.fromId(settings.glassMode),
@@ -110,6 +114,25 @@ fun SettingsScreen(
                 options = vadLabels,
                 selectedIndex = settings.vadSensitivity.ordinal,
                 onSelect = { viewModel.setVadSensitivity(VadSensitivity.entries[it]) },
+            )
+            EchoSegmentedRow(
+                icon = Icons.Rounded.BatterySaver,
+                title = "省电模式",
+                subtitle = if (settings.powerProfile == PowerProfile.SAVER) {
+                    "静默期跳过人声推理，最省电；音频仍保留，人声一响立刻恢复"
+                } else {
+                    "亮屏不占用唤醒锁 · 灭屏限时持有；静默期零丢音"
+                },
+                options = powerLabels,
+                selectedIndex = settings.powerProfile.ordinal,
+                onSelect = { viewModel.setPowerProfile(PowerProfile.entries[it]) },
+            )
+            EchoSwitchRow(
+                icon = Icons.Rounded.Vibration,
+                title = "检测到人声时轻震动",
+                subtitle = "让你确知正在聆听；会略微增加耗电",
+                checked = settings.triggerHaptic,
+                onCheckedChange = viewModel::setTriggerHaptic,
             )
         }
 

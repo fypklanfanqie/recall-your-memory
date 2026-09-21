@@ -19,10 +19,11 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 本地转写模型状态 */
+/** 单个模型的下载/安装状态 */
 sealed interface ModelState {
     data object NotReady : ModelState
     data class Downloading(
+        val modelId: String,
         val fileName: String,
         val fileBytes: Long,
         val fileTotal: Long,
@@ -33,9 +34,24 @@ sealed interface ModelState {
     data class Failed(val message: String) : ModelState
 }
 
+/** 某个模型的安装情况（UI 列表用） */
+data class ModelInstall(
+    val spec: AsrModelSpec,
+    val installed: Boolean,
+    val usedBytes: Long,
+)
+
 /**
- * 离线转写模型管理：多镜像 + 断点续传 + SHA-256 校验 + 本地导入。
- * 模型不进 APK（228MB），首次使用时下载到 filesDir/models/sense-voice。
+ * 多模型管理：每个模型独立子目录（`filesDir/models/<dirName>`），可并存。
+ *
+ * 保留 v1.0 的能力：多镜像 + 断点续传 + SHA-256 校验 + 本地导入。
+ * 模型不进 APK（最小档也有 31MB），首次使用时下载。
+ *
+ * ## v1.1 变化
+ * - 从「单模型」→「多模型 + 当前选中」（[selectedId]）
+ * - 校验按所选模型的清单进行（v1.0 写死了 SenseVoice 的哈希）
+ * - 新增 LRU 引擎缓存（见 [com.echo.recall.core.asr.TranscriptionCoordinator]），
+ *   避免每次转写都重新加载模型
  */
 @Singleton
 class ModelManager @Inject constructor(
@@ -50,46 +66,84 @@ class ModelManager @Inject constructor(
     private val _state = MutableStateFlow<ModelState>(ModelState.NotReady)
     val state: StateFlow<ModelState> = _state.asStateFlow()
 
-    val modelDir: File
-        get() = File(context.filesDir, DIR).apply { if (!exists()) mkdirs() }
+    /** 当前选中的模型 id（默认取推荐档，由 [initSelection] 决定） */
+    private val _selectedId = MutableStateFlow(ModelCatalog.LEGACY_DEFAULT_ID)
+    val selectedId: StateFlow<String> = _selectedId.asStateFlow()
 
-    val modelPath: String get() = File(modelDir, SenseVoiceFiles.MODEL.name).absolutePath
-    val tokensPath: String get() = File(modelDir, SenseVoiceFiles.TOKENS.name).absolutePath
+    val modelsRoot: File
+        get() = File(context.filesDir, ROOT).apply { if (!exists()) mkdirs() }
 
-    fun isReady(): Boolean {
-        // 诊断日志：真机排查模型可见性（是否存在 / 长度是否与内置期望一致 / 能否读取）
-        val checks = SenseVoiceFiles.all.map { spec ->
-            val f = File(modelDir, spec.name)
-            "${spec.name}(exists=${f.exists()}, len=${f.length()}, expect=${spec.sizeBytes}, readable=${f.canRead()})"
+    fun dirFor(spec: AsrModelSpec): File =
+        File(modelsRoot, spec.dirName).apply { if (!exists()) mkdirs() }
+
+    /** 兼容旧调用：v1.0 的模型目录就是 L3 的目录 */
+    val modelDir: File get() = dirFor(ModelCatalog.L3_SENSE_VOICE)
+
+    val selectedSpec: AsrModelSpec
+        get() = ModelCatalog.byId(_selectedId.value) ?: ModelCatalog.L3_SENSE_VOICE
+
+    /**
+     * 首次启动：决定默认选中哪个模型。
+     *
+     * 优先级：
+     * 1. 用户此前显式选过 → 尊重用户选择
+     * 2. **迁移**：v1.0 用户已经下好 SenseVoice（v1.0 目录 `models/sense-voice` 与
+     *    v1.1 的 L3 `dirName` 完全相同），直接用 L3，不让他们白下第二个模型
+     * 3. 否则按设备能力推荐
+     */
+    fun initSelection(savedId: String?) {
+        val saved = savedId?.takeIf { it.isNotBlank() }?.let { ModelCatalog.byId(it) }
+        val resolved = when {
+            saved != null -> saved
+            isInstalled(ModelCatalog.L3_SENSE_VOICE) -> ModelCatalog.L3_SENSE_VOICE
+            else -> ModelCatalog.recommend(deviceTier())
         }
-        val ready = SenseVoiceFiles.all.all { isPresent(File(modelDir, it.name), it) }
-        Log.i(TAG, "isReady=$ready dir=$modelDir ${checks.joinToString(" ")}")
-        return ready
+        _selectedId.value = resolved.id
+        refreshState()
     }
 
-    fun usedBytes(): Long = modelDir.listFiles()?.sumOf { it.length() } ?: 0L
+    /** 探测本机能力（核心数 / 堆上限 / 是否低内存设备） */
+    fun deviceTier(): ModelCatalog.DeviceTier = ModelCatalog.detectDevice(context)
+
+    fun select(spec: AsrModelSpec) {
+        _selectedId.value = spec.id
+        refreshState()
+    }
+
+    /** 指定模型是否已完整安装（逐文件比对体积） */
+    fun isInstalled(spec: AsrModelSpec): Boolean =
+        spec.files.all { isPresent(File(dirFor(spec), it.name), it) }
+
+    fun isReady(): Boolean = isInstalled(selectedSpec)
+
+    fun usedBytesFor(spec: AsrModelSpec): Long =
+        dirFor(spec).listFiles()?.sumOf { it.length() } ?: 0L
+
+    fun usedBytes(): Long = ModelCatalog.all.sumOf { usedBytesFor(it) }
+
+    fun installs(): List<ModelInstall> = ModelCatalog.all.map {
+        ModelInstall(spec = it, installed = isInstalled(it), usedBytes = usedBytesFor(it))
+    }
 
     /** 已下载则刷新状态 */
     fun refreshState() {
         _state.value = if (isReady()) ModelState.Ready else ModelState.NotReady
     }
 
-    suspend fun download(): Result<Unit> = withContext(Dispatchers.IO) {
-        refreshState()
-        if (isReady()) return@withContext Result.success(Unit)
-
+    suspend fun download(spec: AsrModelSpec = selectedSpec): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            for ((index, file) in SenseVoiceFiles.all.withIndex()) {
-                val target = File(modelDir, file.name)
+            val dir = dirFor(spec)
+            for ((index, file) in spec.files.withIndex()) {
+                val target = File(dir, file.name)
                 if (isPresent(target, file)) continue
                 if (target.exists()) target.delete()
 
-                val temp = File(modelDir, "${file.name}.part")
+                val temp = File(dir, "${file.name}.part")
                 var lastError: Throwable? = null
                 var done = false
                 for (url in file.urls) {
                     try {
-                        downloadOne(url, temp, file, index)
+                        downloadOne(url, temp, file, spec, index)
                         done = true
                         break
                     } catch (t: Throwable) {
@@ -106,34 +160,52 @@ class ModelManager @Inject constructor(
                 }
                 if (target.exists()) target.delete()
                 if (!temp.renameTo(target)) throw IOException("无法写入 ${target.name}")
-                Log.i(TAG, "${file.name} ready (${target.length()} bytes)")
+                Log.i(TAG, "${spec.id}/${file.name} ready (${target.length()} bytes)")
             }
-            _state.value = ModelState.Ready
+            refreshState()
             Result.success(Unit)
         } catch (t: Throwable) {
-            Log.e(TAG, "download failed", t)
+            Log.e(TAG, "download failed for ${spec.id}", t)
             _state.value = ModelState.Failed(t.message ?: "下载失败")
             Result.failure(t)
         }
     }
 
-    /** 从本地文件导入（用户自行下载的 model.int8.onnx） */
+    /** 删除某个模型（默认删当前选中） */
+    fun delete(spec: AsrModelSpec = selectedSpec) {
+        dirFor(spec).listFiles()?.forEach { it.delete() }
+        refreshState()
+    }
+
+    /** 删除所有模型 */
+    fun deleteAll() {
+        ModelCatalog.all.forEach { spec -> dirFor(spec).listFiles()?.forEach { it.delete() } }
+        _state.value = ModelState.NotReady
+    }
+
+    /**
+     * 从本地文件导入（用户自行下载的模型文件）。
+     *
+     * 按「当前选中模型」的清单校验哈希；v1.0 只能导入 SenseVoice。
+     */
     suspend fun importModel(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+        val spec = selectedSpec
         try {
-            val target = File(modelDir, SenseVoiceFiles.MODEL.name)
+            val primary = spec.primaryFile
+            val target = File(dirFor(spec), primary.name)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
             } ?: throw IOException("无法读取所选文件")
 
             val actual = sha256(target)
-            if (!actual.equals(SenseVoiceFiles.MODEL.sha256, ignoreCase = true)) {
+            if (!actual.equals(primary.sha256, ignoreCase = true)) {
                 target.delete()
-                throw IOException("所选文件不是预期的 SenseVoice int8 模型（哈希不匹配）")
+                throw IOException("所选文件不是预期的 ${spec.displayName} 模型（哈希不匹配）")
             }
-            if (!File(modelDir, SenseVoiceFiles.TOKENS.name).exists()) {
-                throw IOException("还缺少 tokens.txt，请同时从模型页面下载")
+            if (!isInstalled(spec)) {
+                throw IOException("还缺少 tokens.txt 等文件，请一并从模型页面下载")
             }
-            _state.value = ModelState.Ready
+            refreshState()
             Result.success(Unit)
         } catch (t: Throwable) {
             Log.e(TAG, "import failed", t)
@@ -142,14 +214,18 @@ class ModelManager @Inject constructor(
         }
     }
 
+    /** 导入 tokens.txt（按当前选中模型校验） */
     suspend fun importTokens(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+        val spec = selectedSpec
         try {
-            val target = File(modelDir, SenseVoiceFiles.TOKENS.name)
+            val tokenSpec = spec.files.firstOrNull { it.name == "tokens.txt" }
+                ?: throw IOException("当前模型不需要 tokens.txt")
+            val target = File(dirFor(spec), tokenSpec.name)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
             } ?: throw IOException("无法读取所选文件")
             val actual = sha256(target)
-            if (!actual.equals(SenseVoiceFiles.TOKENS.sha256, ignoreCase = true)) {
+            if (!actual.equals(tokenSpec.sha256, ignoreCase = true)) {
                 target.delete()
                 throw IOException("所选文件不是预期的 tokens.txt")
             }
@@ -160,12 +236,13 @@ class ModelManager @Inject constructor(
         }
     }
 
-    fun deleteAll() {
-        modelDir.listFiles()?.forEach { it.delete() }
-        _state.value = ModelState.NotReady
-    }
-
-    private fun downloadOne(url: String, temp: File, file: AsrModelFile, index: Int) {
+    private fun downloadOne(
+        url: String,
+        temp: File,
+        file: AsrModelFile,
+        spec: AsrModelSpec,
+        index: Int,
+    ) {
         val existing = if (temp.exists()) temp.length() else 0L
         val request = Request.Builder()
             .url(url)
@@ -190,12 +267,12 @@ class ModelManager @Inject constructor(
                         if (read <= 0) break
                         raf.write(buffer, 0, read)
                         written += read
-                        val overall = overallPercent(index, written, knownTotal)
                         _state.value = ModelState.Downloading(
+                            modelId = spec.id,
                             fileName = file.name,
                             fileBytes = written,
                             fileTotal = knownTotal,
-                            overallPercent = overall,
+                            overallPercent = overallPercent(spec, index, written, knownTotal),
                         )
                     }
                 }
@@ -206,10 +283,13 @@ class ModelManager @Inject constructor(
         }
     }
 
-    private fun overallPercent(index: Int, written: Long, total: Long): Int {
-        val fileFraction = if (total > 0) written.toDouble() / total else 0.0
-        val perFile = 100.0 / SenseVoiceFiles.all.size
-        return ((index * perFile) + fileFraction * perFile).toInt().coerceIn(0, 100)
+    private fun overallPercent(spec: AsrModelSpec, index: Int, written: Long, total: Long): Int {
+        // 按字节加权（而非按文件数），否则 tokens.txt 会占掉与模型同等的进度
+        val totalBytes = spec.totalBytes.coerceAtLeast(1L)
+        val before = spec.files.take(index).sumOf { it.sizeBytes }
+        val fraction = if (total > 0) written.toDouble() / total else 0.0
+        val done = before + (fraction * spec.files[index].sizeBytes)
+        return ((done / totalBytes) * 100).toInt().coerceIn(0, 100)
     }
 
     private fun isPresent(file: File, spec: AsrModelFile): Boolean =
@@ -230,6 +310,6 @@ class ModelManager @Inject constructor(
 
     companion object {
         private const val TAG = "ModelManager"
-        const val DIR = "models/sense-voice"
+        const val ROOT = "models"
     }
 }

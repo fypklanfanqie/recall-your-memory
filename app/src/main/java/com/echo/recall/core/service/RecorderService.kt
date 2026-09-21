@@ -1,12 +1,15 @@
 package com.echo.recall.core.service
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -15,19 +18,37 @@ import com.echo.recall.core.audio.RecorderEngine
 import com.echo.recall.core.audio.VadSensitivityPreset
 import com.echo.recall.core.data.MemoryRepository
 import com.echo.recall.core.data.settings.EchoSettings
+import com.echo.recall.core.data.settings.PowerProfile
 import com.echo.recall.core.data.settings.SettingsRepository
 import com.echo.recall.core.data.settings.VadSensitivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * 前台服务：持有麦克风、维持常驻通知（Android 11+ 要求 while-in-use 语义）。
+ *
+ * ## 唤醒锁策略（v1.1 省电改造）
+ *
+ * 旧实现**无条件**持 PARTIAL_WAKE_LOCK，导致 AP 永远无法进入 suspend，是最伤的单项耗电。
+ * 新策略：
+ *
+ * | 场景 | 是否持锁 | 原因 |
+ * |------|---------|------|
+ * | 亮屏聆听 | **不持** | 屏幕亮时 AP 本就活跃，持锁是纯浪费 |
+ * | 灭屏聆听 | 持，但**限时续租**（10 分钟一轮） | 需要保证采集线程被调度 |
+ * | 暂停/停止 | 立即释放 | — |
+ *
+ * 音频采集本身是唤醒源（audio IRQ 会唤醒 AP），所以**灭屏不持锁也能继续采集**；
+ * 限时续租是为了在深度 Doze 下仍能可靠被调度，同时给系统留下进入低功耗态的窗口。
  */
 @AndroidEntryPoint
 class RecorderService : Service() {
@@ -39,6 +60,16 @@ class RecorderService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wakeLockRenewJob: Job? = null
+
+    /** 屏幕状态变化 → 重新评估是否该持唤醒锁 */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF, Intent.ACTION_SCREEN_ON -> updateWakeLockPolicy()
+            }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -46,8 +77,24 @@ class RecorderService : Service() {
         super.onCreate()
         isRunning = true
         RecorderNotifications.ensureChannel(this)
+        registerScreenReceiver()
         // 必须立刻进入前台（startForegroundService 有 5 秒限制）
         promoteToForeground(statusText = "正在聆听", paused = false)
+    }
+
+    private fun registerScreenReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                screenReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }.onFailure { Log.w(TAG, "screen receiver register failed", it) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -57,12 +104,14 @@ class RecorderService : Service() {
             }
             ACTION_PAUSE -> {
                 engine.pause()
+                updateWakeLockPolicy()
                 refreshNotification()
             }
             ACTION_RESUME -> {
                 scope.launch {
                     val settings = settingsRepository.settings.first()
                     engine.resume()
+                    updateWakeLockPolicy()
                     refreshNotification(settings)
                 }
             }
@@ -99,9 +148,10 @@ class RecorderService : Service() {
         engine.start(
             windowMs = settings.windowSeconds * 1000L,
             preset = settings.vadSensitivity.toPreset(),
+            powerProfile = settings.powerProfile,
         )
         settingsRepository.setRecordingEnabled(true)
-        acquireWakeLock()
+        updateWakeLockPolicy()
         refreshNotification(settings)
     }
 
@@ -185,16 +235,51 @@ class RecorderService : Service() {
         }
     }
 
+    // ---- 唤醒锁：只在「灭屏且正在聆听」时持有，且限时续租 ----
+
+    /** 按当前屏幕/聆听状态重新评估唤醒锁；所有调用点都应走这里 */
+    private fun updateWakeLockPolicy() {
+        val manager = getSystemService(PowerManager::class.java)
+        val screenOff = manager?.isInteractive?.not() ?: false
+        if (screenOff && engine.isListening) {
+            acquireWakeLock()
+        } else {
+            releaseWakeLock()
+        }
+    }
+
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
         val manager = getSystemService(PowerManager::class.java) ?: return
         wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG).apply {
             setReferenceCounted(false)
-            runCatching { acquire() }
+            // 限时持有：到点自动释放，给系统留下进入低功耗态的窗口
+            runCatching { acquire(WAKELOCK_TIMEOUT_MS) }
+        }
+        startWakeLockRenewal()
+        Log.i(TAG, "wake lock acquired (screen off, listening)")
+    }
+
+    /** 续租：只要仍满足「灭屏 + 聆听」就周期性重取，否则停掉 */
+    private fun startWakeLockRenewal() {
+        if (wakeLockRenewJob?.isActive == true) return
+        wakeLockRenewJob = scope.launch {
+            while (isActive) {
+                delay(WAKELOCK_RENEW_MS)
+                val manager = getSystemService(PowerManager::class.java)
+                val screenOff = manager?.isInteractive?.not() ?: false
+                if (!screenOff || !engine.isListening) {
+                    releaseWakeLock()
+                    break
+                }
+                runCatching { wakeLock?.acquire(WAKELOCK_TIMEOUT_MS) }
+            }
         }
     }
 
     private fun releaseWakeLock() {
+        wakeLockRenewJob?.cancel()
+        wakeLockRenewJob = null
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
     }
@@ -202,6 +287,7 @@ class RecorderService : Service() {
     override fun onDestroy() {
         isRunning = false
         releaseWakeLock()
+        runCatching { unregisterReceiver(screenReceiver) }
         scope.cancel()
         super.onDestroy()
     }
@@ -209,6 +295,12 @@ class RecorderService : Service() {
     companion object {
         private const val TAG = "RecorderService"
         private const val WAKELOCK_TAG = "echo:listening"
+
+        /** 单次持锁上限 */
+        private const val WAKELOCK_TIMEOUT_MS = 10 * 60 * 1000L
+
+        /** 续租间隔（略短于上限，保证不出现空隙） */
+        private const val WAKELOCK_RENEW_MS = 9 * 60 * 1000L
 
         /** 自愈探测用：服务是否活着 */
         @Volatile

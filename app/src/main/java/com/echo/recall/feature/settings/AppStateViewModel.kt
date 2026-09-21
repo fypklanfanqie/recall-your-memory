@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.echo.recall.core.audio.RecorderEngine
 import com.echo.recall.core.data.settings.EchoSettings
+import com.echo.recall.core.data.settings.PowerProfile
 import com.echo.recall.core.data.settings.SettingsRepository
 import com.echo.recall.core.data.settings.ThemeMode
 import com.echo.recall.core.data.settings.VadSensitivity
@@ -31,6 +33,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AppStateViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val engine: RecorderEngine,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -43,6 +46,14 @@ class AppStateViewModel @Inject constructor(
     fun setWindowMinutes(minutes: Float) = viewModelScope.launch { settingsRepository.setWindowMinutes(minutes) }
 
     fun setVadSensitivity(value: VadSensitivity) = viewModelScope.launch { settingsRepository.setVadSensitivity(value) }
+
+    fun setPowerProfile(value: PowerProfile) = viewModelScope.launch {
+        settingsRepository.setPowerProfile(value)
+        // 立即生效，无需重启服务
+        engine.setPowerProfile(value)
+    }
+
+    fun setTriggerHaptic(enabled: Boolean) = viewModelScope.launch { settingsRepository.setTriggerHaptic(enabled) }
 
     fun setGlassMode(mode: String) = viewModelScope.launch { settingsRepository.setGlassMode(mode) }
 

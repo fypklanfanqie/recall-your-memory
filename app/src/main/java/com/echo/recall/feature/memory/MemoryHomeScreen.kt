@@ -111,6 +111,17 @@ fun MemoryHomeScreen(
         }
     }
 
+    // 触发反馈（可选）：检测到人声时轻震动，让用户确知系统正在聆听。
+    // 只在「开始说话」的那一瞬间震一次，不是每帧都震。
+    val triggerHaptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    LaunchedEffect(status.speechDetected, settings.triggerHaptic) {
+        if (settings.triggerHaptic && status.speechDetected) {
+            triggerHaptic.performHapticFeedback(
+                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+            )
+        }
+    }
+
     val listening = status.state == RecorderEngine.State.LISTENING ||
         status.state == RecorderEngine.State.PAUSED
 

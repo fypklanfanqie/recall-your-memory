@@ -1,6 +1,8 @@
 package com.echo.recall.core.asr
 
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.util.Log
 import com.echo.recall.core.audio.AudioDecoder
 import com.echo.recall.core.audio.PcmUtils
@@ -26,16 +28,19 @@ import javax.inject.Singleton
 /**
  * 转写协调器：把「回溯后内存中的 PCM」或「已保存的音频」转成文字。
  *
- * - 同时只跑一个转写任务（[mutex]），避免 228MB 模型被并发加载
+ * - 同时只跑一个转写任务（[mutex]），避免多个大模型被并发加载
  * - 逐片段推进度，文字实时写库（UI 自动刷新）
- * - 转写完立即释放模型，避免常驻内存（后台服务要长时间活着）
+ * - **引擎 LRU 缓存**（v1.1 新增）：v1.0 每次转写都新建 → 立即 release，
+ *   228MB 模型反复加载是秒级开销。现在按模型 id 缓存 1 个引擎，
+ *   系统内存吃紧（onTrimMemory）时立即释放。
  */
 @Singleton
 class TranscriptionCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val modelManager: ModelManager,
     private val memoryRepository: MemoryRepository,
-) {
+) : ComponentCallbacks2 {
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
 
@@ -45,6 +50,49 @@ class TranscriptionCoordinator @Inject constructor(
     val progress: StateFlow<Map<String, Int>> = _progress.asStateFlow()
 
     val isModelReady: Boolean get() = modelManager.isReady()
+
+    // ---- 引擎缓存（只保留 1 个；模型不同则先释放旧的）----
+    private var cachedEngine: AsrEngine? = null
+    private var cachedModelId: String? = null
+
+    init {
+        runCatching { context.registerComponentCallbacks(this) }
+    }
+
+    private fun engineFor(spec: AsrModelSpec): AsrEngine {
+        cachedEngine?.let { if (cachedModelId == spec.id) return it }
+        cachedEngine?.release()
+        cachedEngine = null
+        val engine = AsrEngineFactory.create(spec, modelManager.dirFor(spec).absolutePath)
+        cachedEngine = engine
+        cachedModelId = spec.id
+        return engine
+    }
+
+    private fun releaseEngine() {
+        cachedEngine?.release()
+        cachedEngine = null
+        cachedModelId = null
+    }
+
+    /** 系统内存吃紧：立刻放掉大模型 */
+    override fun onTrimMemory(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            Log.i(TAG, "onTrimMemory($level) -> release ASR engine")
+            releaseEngine()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) = Unit
+    override fun onLowMemory() {
+        Log.i(TAG, "onLowMemory -> release ASR engine")
+        releaseEngine()
+    }
+
+    /** 切换模型后调用：旧引擎必须释放 */
+    fun onModelChanged() {
+        releaseEngine()
+    }
 
     /** 回溯后立刻转写：PCM 还在内存里，无需解码 */
     fun transcribeSegments(memoryId: String, orderedPcm: List<ShortArray>) {
@@ -74,7 +122,8 @@ class TranscriptionCoordinator @Inject constructor(
 
     private suspend fun run(memoryId: String, pcmProvider: suspend () -> List<ShortArray>?) {
         mutex.withLock {
-            Log.i(TAG, "run start memoryId=$memoryId modelDir=${modelManager.modelDir}")
+            val spec = modelManager.selectedSpec
+            Log.i(TAG, "run start memoryId=$memoryId model=${spec.id} dir=${modelManager.dirFor(spec)}")
             if (!modelManager.isReady()) {
                 Log.w(TAG, "model not ready -> keep PENDING for $memoryId")
                 memoryRepository.setTranscribeState(memoryId, TranscribeState.PENDING)
@@ -90,10 +139,9 @@ class TranscriptionCoordinator @Inject constructor(
             memoryRepository.setTranscribeState(memoryId, TranscribeState.RUNNING)
             _progress.update { it + (memoryId to 0) }
 
-            var engine: SenseVoiceEngine? = null
             try {
                 val chunks = resolveChunks(entity, segments, pcmProvider)
-                engine = SenseVoiceEngine(modelManager.modelDir.absolutePath)
+                val engine = engineFor(spec)
 
                 var language: String? = null
                 var emotion: String? = null
@@ -136,9 +184,10 @@ class TranscriptionCoordinator @Inject constructor(
                 Log.i(TAG, "transcribed $memoryId: ${updated.count { !it.text.isNullOrBlank() }}/${segments.size} segments")
             } catch (t: Throwable) {
                 Log.e(TAG, "transcription failed for $memoryId", t)
+                // 引擎可能已损坏（native 异常后不可再用）→ 丢弃缓存，下次重建
+                releaseEngine()
                 memoryRepository.setTranscribeState(memoryId, TranscribeState.FAILED)
             } finally {
-                engine?.release()
                 _progress.update { it - memoryId }
             }
         }
