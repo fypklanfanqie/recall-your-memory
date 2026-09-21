@@ -2,7 +2,6 @@ package com.echo.recall.core.asr
 
 import android.app.ActivityManager
 import android.content.Context
-import android.os.Build
 
 /**
  * 本地转写模型目录：3 档模型 + 设备分级推荐。
@@ -252,7 +251,4 @@ object ModelCatalog {
         cores <= 6 -> 3
         else -> 4
     }
-
-    /** 系统版本信息，供 UI 展示 */
-    fun deviceApiLevel(): Int = Build.VERSION.SDK_INT
 }

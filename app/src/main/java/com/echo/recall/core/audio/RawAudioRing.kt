@@ -41,12 +41,12 @@ class RawAudioRing(val capacitySamples: Int = DEFAULT_CAPACITY_SAMPLES) {
      */
     fun write(samples: ShortArray, length: Int = samples.size, nowMs: Long) {
         if (length <= 0) return
-        val src = if (length <= capacitySamples) samples else samples
+        // 帧长超过容量时只保留尾部（srcOffset 跳过被丢弃的前段）
         val n = minOf(length, capacitySamples)
         val srcOffset = length - n
 
         for (i in 0 until n) {
-            buf[writePos] = src[srcOffset + i]
+            buf[writePos] = samples[srcOffset + i]
             writePos++
             if (writePos == capacitySamples) writePos = 0
         }

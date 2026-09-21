@@ -76,9 +76,6 @@ class ModelManager @Inject constructor(
     fun dirFor(spec: AsrModelSpec): File =
         File(modelsRoot, spec.dirName).apply { if (!exists()) mkdirs() }
 
-    /** 兼容旧调用：v1.0 的模型目录就是 L3 的目录 */
-    val modelDir: File get() = dirFor(ModelCatalog.L3_SENSE_VOICE)
-
     val selectedSpec: AsrModelSpec
         get() = ModelCatalog.byId(_selectedId.value) ?: ModelCatalog.L3_SENSE_VOICE
 

@@ -27,14 +27,7 @@ data class ClosedSegment(
     val startMs: Long,
     val endMs: Long,
     val samples: FloatArray,
-) {
-    fun toRingSegment(): SpeechRingBuffer.Segment =
-        SpeechRingBuffer.Segment(
-            startMs = startMs,
-            endMs = endMs,
-            pcm = PcmUtils.floatsToShorts(samples),
-        )
-}
+)
 
 /**
  * silero-vad 封装（sherpa-onnx），把连续音频流切成「人声片段」并附上墙钟时间戳。

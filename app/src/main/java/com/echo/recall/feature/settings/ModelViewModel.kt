@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.echo.recall.core.asr.AsrModelSpec
-import com.echo.recall.core.asr.AsrModelTier
 import com.echo.recall.core.asr.ModelCatalog
 import com.echo.recall.core.asr.ModelInstall
 import com.echo.recall.core.asr.ModelManager
@@ -140,6 +139,4 @@ class ModelViewModel @Inject constructor(
             transcription.transcribePending()
         }
     }
-
-    fun tierLabel(tier: AsrModelTier): String = tier.label
 }

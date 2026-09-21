@@ -89,10 +89,13 @@ class RecorderEngine @Inject constructor(
     // ---- 采集线程私有状态（不需要锁）----
     private val frameShorts = ShortArray(AudioSpec.FRAME_SAMPLES)
     private val frameFloats = FloatArray(AudioSpec.FRAME_SAMPLES)
-    private var lastVoiceAtMs = 0L
-    private var captureMode = CaptureMode.ACTIVE
-    private var skippedFrames = 0L
-    private var totalFrames = 0L
+
+    // 下面几个由采集线程写、会被 ticker 线程读（决定状态发布间隔与诊断指标），故加 @Volatile
+    @Volatile private var lastVoiceAtMs = 0L
+    @Volatile private var captureMode = CaptureMode.ACTIVE
+    @Volatile private var skippedFrames = 0L
+    @Volatile private var totalFrames = 0L
+
     /** VAD 报出起点时抓下的句首预滚 */
     private var pendingPreroll: ShortArray? = null
     private var wasSpeech = false
@@ -235,7 +238,7 @@ class RecorderEngine @Inject constructor(
     /** 回溯：冲刷在说的那一段 → 窗口裁剪 → 取走并清空 */
     fun recall(): List<SpeechRingBuffer.Segment> {
         val now = SystemClock.elapsedRealtime()
-        // 锁序固定：vadLock → audioLock（与 captureLoop 一致）
+        // vadLock 与 audioLock 从不嵌套持有（都是「取完就放」），因此不存在锁序死锁风险
         val flushed = synchronized(vadLock) { vad?.flush(now) }.orEmpty()
         commitSegments(flushed, now)
         synchronized(audioLock) {
