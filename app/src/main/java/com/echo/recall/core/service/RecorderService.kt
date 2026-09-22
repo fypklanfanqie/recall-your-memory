@@ -57,6 +57,7 @@ class RecorderService : Service() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var memoryRepository: MemoryRepository
     @Inject lateinit var transcription: TranscriptionCoordinator
+    @Inject lateinit var recallCoordinator: RecallCoordinator
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var wakeLock: PowerManager.WakeLock? = null
@@ -157,30 +158,20 @@ class RecorderService : Service() {
 
     private suspend fun performRecall() {
         val settings = settingsRepository.settings.first()
-        val segments = engine.recall()
-        if (segments.isEmpty()) {
-            RecorderNotifications.notify(
-                this,
-                windowLabel = settings.windowLabel(),
-                statusText = "最近 ${settings.windowLabel()} 没有记录到人声",
-                paused = !engine.isListening,
-            )
-            return
-        }
-        val ordered = segments.sortedBy { it.startMs }
-        val entity = memoryRepository.createFromRecall(ordered, engine.epochOffsetMs())
-        // 模型已就绪则立刻本地转写（PCM 还在内存里，无需解码）
-        if (entity != null && transcription.isModelReady) {
-            transcription.transcribeSegments(entity.id, ordered.map { it.pcm })
+        // 与首页大按钮共用同一条流程（RecallCoordinator），避免两份实现漂移
+        val statusText = when (val outcome = recallCoordinator.recall()) {
+            RecallCoordinator.Outcome.NoSpeech ->
+                "最近 ${settings.windowLabel()} 没有记录到人声"
+            RecallCoordinator.Outcome.Failed -> "记忆生成失败"
+            is RecallCoordinator.Outcome.Created -> when {
+                outcome.transcribing -> "已生成记忆，正在本地转写"
+                else -> "已生成本次记忆（未下载转写模型）"
+            }
         }
         RecorderNotifications.notify(
             this,
             windowLabel = settings.windowLabel(),
-            statusText = when {
-                entity == null -> "记忆生成失败"
-                transcription.isModelReady -> "已生成记忆，正在本地转写"
-                else -> "已生成本次记忆（未下载转写模型）"
-            },
+            statusText = statusText,
             paused = !engine.isListening,
         )
     }

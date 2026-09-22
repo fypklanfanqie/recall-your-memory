@@ -1,6 +1,6 @@
 # 回声 Echo（recall-your-memory）
 
-![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.1.0-blue) ![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Android%208.0%2B-green) ![测试](https://img.shields.io/badge/%E5%8D%95%E6%B5%8B-141%20%E9%A1%B9%E5%85%A8%E7%BB%BF-success)
+![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.1.0-blue) ![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Android%208.0%2B-green) ![测试](https://img.shields.io/badge/%E5%8D%95%E6%B5%8B-146%20%E9%A1%B9%E5%85%A8%E7%BB%BF-success)
 
 > 环境声环形录音 + 人声检测 + 本地转写 + 云端 LLM 总结问答的 Android 记忆回溯 App。
 > iOS 设计语言 · 液态玻璃 UI · 底部 Dock 五大功能 · 本地转写全程离线。
@@ -96,7 +96,9 @@
 | **R1** | UI/UX 与液态玻璃重构（详见 [PLAN.md](PLAN.md) §14.1） | ✅ |
 | **R2** | 省电优化 + 触发门重构 + 本地模型分级（详见 [docs/PLAN-OPTIMIZATION.md](docs/PLAN-OPTIMIZATION.md)） | ✅ |
 
-**验证门禁（全部通过）**：`testDebugUnitTest` **141 项测试 / 0 失败** · `assembleDebug` 通过 · `assembleRelease` 通过（R8 混淆 + 资源压缩）
+**验证门禁（全部通过）**：`testDebugUnitTest` **146 项测试 / 0 失败** · `assembleDebug` 通过 · `assembleRelease` 通过（R8 混淆 + 资源压缩）
+
+**R2 真机验证（2026-09，Xiaomi 8 核 / 15.5GB）**：修复了 4 个真机暴露的问题，其中 **1 个是 v1.0 就存在的核心功能失效** —— 点首页大按钮生成的记忆**永远不会转写**（回溯流程有两份实现，`MemoryViewModel` 那份漏了启动转写），现已收敛为单一的 `RecallCoordinator`。同时真机验证了 L1 模型国内直连下载 + SHA-256 校验、新增的流式识别引擎无 native 崩溃、引擎 LRU 缓存生效。详见 [PLAN.md](PLAN.md) §14.3。
 
 **R1 重构要点（2026-09）**：修复「立即本地转写」native 闪退（sherpa-onnx 构造参数误用）；工具链升级 Kotlin 2.4.10 / AGP 9.1.1 / Gradle 9.7.1 / Compose 1.12.1；液态玻璃换正版 **Kyant0 backdrop-android 2.0.1 + Shapes 1.2.1**（Dock 玻璃上玻璃滑块可拖动换页）；iOS 组件库、全局触感与 push 转场；清后台自愈保活；回溯转写逐段流式上屏；内置壁纸裁剪。
 

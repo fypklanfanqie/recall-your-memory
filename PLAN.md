@@ -345,11 +345,33 @@ NoteEntity(id, title, content, createdAt, updatedAt, pinned, aiVersionsJson?)
 | 触发门 | 单级（直接喂 VAD） | **两级**：自适应能量门（不达标不喂 VAD）+ 过零率/能量平稳度过滤 | 静默期 VAD 推理是主要 CPU 开销；两级门同时降误报 |
 | 非人声过滤强度 | 「滤掉电视/音乐」 | **有意做成召回优先**：中频纯音（440Hz，ZCR≈0.055）落在人声带内，**不拒绝**；只拒绝低频嗡鸣与宽带稳态噪声 | 靠过零率无法分开 440Hz 纯音与语音，强行调低阈值会误杀元音。误杀 = 用户记忆永久丢失，代价远大于漏过滤。更激进的过滤应在**转写后**用 SenseVoice 的 `event` 标签回标 |
 | 句首预滚 | 未计划 | **新增**：VAD 报出起点时补上起点前 400ms（`RawAudioRing` + `isSpeechDetected()` 上升沿抓取） | 修掉「第一个字被切掉」的体感问题 |
-| 模型档位 | 单模型 228MB 硬编码 | **3 档**：L1 Zipformer-14M **29MB** / L2 Paraformer-small **78MB** / L3 SenseVoice **228MB**；按 CPU 核心数 + 堆上限自动推荐 | 低端机下不动也用不了 228MB 模型 |
+| 模型档位 | 单模型 228MB 硬编码 | **3 档**：L1 Zipformer-14M **29MB** / L2 Paraformer-small **78MB** / L3 SenseVoice **228MB**；按 CPU 核心数 + **设备总内存**自动推荐 | 低端机下不动也用不了 228MB 模型 |
 | 模型下载源 | hf-mirror → huggingface | **hf-mirror → modelscope → huggingface** | 实测 ModelScope 上 `csukuangfj`/`k2-fsa`/`pkufool` 命名空间全部 404，但存在**第三方社区转存**且**逐字节一致**；作为独立境内兜底源，由强制 SHA-256 校验兜底供应链风险 |
 | 转写线程数 | 写死 2 | 随核心数伸缩（≤4核→2、6核→3、≥8核→4），**封顶 4** | 依据官方 RK3588 实测 RTF：1线程 0.436 → 4线程 0.175，之后收益递减而功耗线性上升 |
 | 引擎生命周期 | 每次转写新建 → 立即 release | **LRU 缓存 1 个引擎**，`onTrimMemory` 时释放 | 228MB 模型反复加载是秒级开销 |
 | 升级兼容 | — | v1.0 目录 `models/sense-voice` 与 v1.1 的 L3 `dirName` **完全相同** → 老用户已下载的 228MB 模型直接沿用，并**优先选中 L3** | 避免让老用户白下第二个模型 |
-| 门禁 | — | `testDebugUnitTest`（**141 项**）+ `assembleDebug` + `assembleRelease`（R8）全绿 | 单测从 69 → 141 项 |
+| 门禁 | — | `testDebugUnitTest`（**146 项**）+ `assembleDebug` + `assembleRelease`（R8）全绿 | 单测从 69 → 146 项 |
 
 **未做 / 诚实边界**：麦克风硬件功耗无法通过上述手段降低（`AudioRecord` 活动即麦克风供电域开启），真正的大头是唤醒锁改造；省电百分比为设计目标，**需真机实测校准**，未实测前不写入 README 具体数字。
+
+### 14.3 v1.1 真机验证记录（2026-09，Xiaomi 2410DPN6CC · 8 核 · 15.5GB）
+
+连真机 adb 实测，发现并修掉 4 个问题（其中 1 个是 v1.0 就存在的**核心功能失效**）：
+
+| # | 严重度 | 问题 | 根因 | 修法 |
+|---|--------|------|------|------|
+| 1 | **P0 核心功能失效** | 点首页最大的「回溯记忆」按钮生成的记忆**永远不会转写**，UI 一直卡在「转写中」 | v1.0 里回溯流程有**两份实现**：`RecorderService.performRecall()` 含转写，`MemoryViewModel.recall()` **漏了转写**；而首页大按钮走的正是后者（通知栏「回溯」按钮才走前者） | 抽出 `RecallCoordinator` 作为**唯一实现**，服务与 ViewModel 都只调它 —— 两份实现必然漂移 |
+| 2 | P1 推荐错误 | 8 核 / 15.5GB 的高配机被推荐 L2（78MB）而非 L3（228MB） | 判据用了 `ActivityManager.getMemoryClass()` = **Java 堆上限**（该机仅 256MB），而 onnxruntime 模型是 **native 常驻、不受堆上限约束** | 改用 `MemoryInfo.totalMem`（设备总内存）：L1 <3GB；L3 需 ≥6GB 且核心 ≥8 |
+| 3 | P2 误导 UI | 未下载的模型也显示「使用中」 | 只判断了 `isSelected`，没判断 `installed` | 未下载时显示「已选 · 待下载」 |
+| 4 | P2 功能回退 | 重写模型页时**丢了** v1.0 的「补转写待处理记忆」按钮 | 我重写 `ModelScreen` 时的遗漏 | 补回（归入「维护」分组）；它同时是修复 #1 遗留卡住记忆的恢复入口 |
+
+**真机验证通过的能力**（此前只有单测、无真机证据）：
+
+- **L1 模型国内直连下载 + SHA-256 校验**：从 `hf-mirror.com` 下载 4 个文件约 24s，全部哈希校验通过、体积精确吻合 —— 证明本仓库自行计算的 SHA-256 与镜像地址有效
+- **新增的 `StreamingAsrEngine`（OnlineRecognizer）**：真机构造成功、**无 native abort**，`threads=4`（8 核自适应生效），产出真实中文
+- **引擎 LRU 缓存**：连续转写两条记忆**只构造了一次引擎**（v1.0 每次都要重载 228MB）
+- **端到端**：说话 → VAD 触发 → 缓冲 → 回溯 → 落库 → 本地转写 → UI 出字，全链路真机跑通
+- **识别质量抽验**：用 sherpa-onnx 官方中文测试音频（实际内容「开放时间早上9点至下午5点」）识别出「早上九点去上午十点」，确认 L1 档确实能识别中文
+- 两级触发门在真机上正常放行真实人声（窗口内累计人声秒数正常增长）
+
+**仍未验证（如实记录）**：省电百分比需过夜 soak 实测（`tools/verify-device.ps1 -SoakHours 8`）；L2（Paraformer）档未在真机下载验证；`VAD_SKIP` 极致省电档的边界未实测。

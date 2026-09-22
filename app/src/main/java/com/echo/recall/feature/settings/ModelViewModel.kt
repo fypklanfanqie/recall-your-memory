@@ -24,7 +24,13 @@ import javax.inject.Inject
 
 /** 模型列表页的完整视图状态 */
 data class ModelScreenState(
-    val device: ModelCatalog.DeviceTier = ModelCatalog.DeviceTier(0, 0, false),
+    // 全部用命名参数：DeviceTier 加字段时不会静默错位（踩过一次）
+    val device: ModelCatalog.DeviceTier = ModelCatalog.DeviceTier(
+        cores = 0,
+        totalRamMb = 0,
+        memoryClassMb = 0,
+        lowRam = false,
+    ),
     val recommendedId: String = "",
     val recommendReason: String = "",
     val selectedId: String = "",

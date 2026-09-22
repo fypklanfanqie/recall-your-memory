@@ -14,8 +14,8 @@ import org.junit.Test
  */
 class ModelCatalogTest {
 
-    private fun device(cores: Int, memoryClassMb: Int, lowRam: Boolean = false) =
-        ModelCatalog.DeviceTier(cores = cores, memoryClassMb = memoryClassMb, lowRam = lowRam)
+    private fun device(cores: Int, totalRamMb: Int, lowRam: Boolean = false) =
+        ModelCatalog.DeviceTier(cores = cores, totalRamMb = totalRamMb, lowRam = lowRam)
 
     // ---------------------------------------------------------------- 目录完整性
 
@@ -224,7 +224,7 @@ class ModelCatalogTest {
 
     @Test
     fun `low ram device gets the light tier`() {
-        val spec = ModelCatalog.recommend(device(cores = 8, memoryClassMb = 512, lowRam = true))
+        val spec = ModelCatalog.recommend(device(cores = 8, totalRamMb = 8 * 1024, lowRam = true))
         assertEquals(ModelCatalog.L1_ZIPFORMER_14M, spec)
     }
 
@@ -232,26 +232,30 @@ class ModelCatalogTest {
     fun `device with fewer than four cores gets the light tier`() {
         assertEquals(
             ModelCatalog.L1_ZIPFORMER_14M,
-            ModelCatalog.recommend(device(cores = 2, memoryClassMb = 512)),
+            ModelCatalog.recommend(device(cores = 2, totalRamMb = 8 * 1024)),
         )
         assertEquals(
             ModelCatalog.L1_ZIPFORMER_14M,
-            ModelCatalog.recommend(device(cores = 3, memoryClassMb = 512)),
+            ModelCatalog.recommend(device(cores = 3, totalRamMb = 8 * 1024)),
         )
     }
 
     @Test
-    fun `tiny heap gets the light tier`() {
-        // 堆上限过小时，228MB 模型根本加载不进来
+    fun `low total ram gets the light tier`() {
+        // 总内存不足 3GB：大模型装不下也跑不动
         assertEquals(
             ModelCatalog.L1_ZIPFORMER_14M,
-            ModelCatalog.recommend(device(cores = 8, memoryClassMb = 128)),
+            ModelCatalog.recommend(device(cores = 8, totalRamMb = 2 * 1024)),
+        )
+        assertEquals(
+            ModelCatalog.L1_ZIPFORMER_14M,
+            ModelCatalog.recommend(device(cores = 8, totalRamMb = ModelCatalog.L1_MAX_RAM_MB - 1)),
         )
     }
 
     @Test
     fun `flagship device gets the accurate tier`() {
-        val spec = ModelCatalog.recommend(device(cores = 8, memoryClassMb = 512))
+        val spec = ModelCatalog.recommend(device(cores = 8, totalRamMb = 8 * 1024))
         assertEquals(ModelCatalog.L3_SENSE_VOICE, spec)
     }
 
@@ -259,13 +263,42 @@ class ModelCatalogTest {
     fun `mid range device gets the balanced tier`() {
         assertEquals(
             ModelCatalog.L2_PARAFORMER_SMALL,
-            ModelCatalog.recommend(device(cores = 6, memoryClassMb = 256)),
+            ModelCatalog.recommend(device(cores = 6, totalRamMb = 6 * 1024)),
         )
-        // 8 核但堆上限不够大 → 仍然 L2
+        // 8 核但内存不到 6GB → 仍然 L2
         assertEquals(
             ModelCatalog.L2_PARAFORMER_SMALL,
-            ModelCatalog.recommend(device(cores = 8, memoryClassMb = 256)),
+            ModelCatalog.recommend(device(cores = 8, totalRamMb = 4 * 1024)),
         )
+    }
+
+    @Test
+    fun `heap limit does not affect the recommendation`() {
+        // 真机教训：8 核 / 15.5GB 的机器 getMemoryClass() 只报 256MB。
+        // 模型是 native 常驻、不受 Java 堆上限约束，所以堆上限**不得**影响推荐结果。
+        val bigPhoneSmallHeap = ModelCatalog.DeviceTier(
+            cores = 8, totalRamMb = 15 * 1024, memoryClassMb = 256, lowRam = false,
+        )
+        assertEquals(
+            "堆上限小不应把高配机降级到 L2",
+            ModelCatalog.L3_SENSE_VOICE,
+            ModelCatalog.recommend(bigPhoneSmallHeap),
+        )
+        val bigHeap = bigPhoneSmallHeap.copy(memoryClassMb = 1024)
+        assertEquals(
+            "堆上限大也不应改变结论",
+            ModelCatalog.L3_SENSE_VOICE,
+            ModelCatalog.recommend(bigHeap),
+        )
+    }
+
+    @Test
+    fun `the actual test device is recommended the accurate tier`() {
+        // 真机实测值：8 核 / 15476592 kB ≈ 15114 MB / memoryClass 256MB
+        val real = ModelCatalog.DeviceTier(
+            cores = 8, totalRamMb = 15114, memoryClassMb = 256, lowRam = false,
+        )
+        assertEquals(ModelCatalog.L3_SENSE_VOICE, ModelCatalog.recommend(real))
     }
 
     @Test
@@ -274,8 +307,8 @@ class ModelCatalogTest {
             device(0, 0),
             device(-1, -1),
             device(1, 1),
-            device(64, 4096),
-            device(4, 192),
+            device(64, 32 * 1024),
+            device(4, 3 * 1024),
         )
         odd.forEach { d ->
             assertNotNull("device=$d 必须有推荐结果", ModelCatalog.recommend(d))
@@ -283,11 +316,20 @@ class ModelCatalogTest {
     }
 
     @Test
+    fun `unknown total ram is treated conservatively`() {
+        // totalRamMb = 0（探测失败）不应被当成「内存充足」而推荐大模型
+        assertEquals(
+            ModelCatalog.L2_PARAFORMER_SMALL,
+            ModelCatalog.recommend(device(cores = 8, totalRamMb = 0)),
+        )
+    }
+
+    @Test
     fun `recommendation is monotonic in device power`() {
         // 更强的设备不应得到更低的档位
-        val weak = ModelCatalog.recommend(device(2, 96, lowRam = true))
-        val mid = ModelCatalog.recommend(device(6, 256))
-        val strong = ModelCatalog.recommend(device(8, 512))
+        val weak = ModelCatalog.recommend(device(2, 2 * 1024, lowRam = true))
+        val mid = ModelCatalog.recommend(device(6, 6 * 1024))
+        val strong = ModelCatalog.recommend(device(8, 8 * 1024))
         assertTrue(weak.tier.order <= mid.tier.order)
         assertTrue(mid.tier.order <= strong.tier.order)
     }
@@ -299,7 +341,7 @@ class ModelCatalogTest {
             ModelCatalog.L2_PARAFORMER_SMALL,
             ModelCatalog.L3_SENSE_VOICE,
         ).forEach { spec ->
-            val reason = ModelCatalog.recommendReason(device(8, 512), spec)
+            val reason = ModelCatalog.recommendReason(device(8, 8 * 1024), spec)
             assertTrue("$spec 的推荐理由不能为空", reason.isNotBlank())
             assertTrue("推荐理由应说明设备情况：$reason", reason.contains("核"))
         }
@@ -327,14 +369,25 @@ class ModelCatalogTest {
 
     @Test
     fun `device summary mentions cores and memory`() {
-        val s = device(8, 512).summary()
-        assertTrue(s.contains("8"))
-        assertTrue(s.contains("512"))
+        val s = device(8, 8 * 1024).summary()
+        assertTrue("应含核心数：$s", s.contains("8"))
+        assertTrue("应含内存：$s", s.contains("8.0GB"))
+    }
+
+    @Test
+    fun `device summary shows sub gigabyte memory in megabytes`() {
+        val s = device(4, 512).summary()
+        assertTrue("小于 1GB 时用 MB 展示：$s", s.contains("512MB"))
+    }
+
+    @Test
+    fun `device summary handles unknown memory`() {
+        assertTrue(device(4, 0).summary().contains("内存未知"))
     }
 
     @Test
     fun `device summary flags low ram devices`() {
-        assertTrue(device(4, 128, lowRam = true).summary().contains("低内存"))
-        assertTrue(!device(8, 512, lowRam = false).summary().contains("低内存"))
+        assertTrue(device(4, 2 * 1024, lowRam = true).summary().contains("低内存"))
+        assertTrue(!device(8, 8 * 1024, lowRam = false).summary().contains("低内存"))
     }
 }

@@ -193,16 +193,28 @@ object ModelCatalog {
      * 设备能力探测结果。
      *
      * @param cores        CPU 核心数
-     * @param memoryClassMb `ActivityManager.getMemoryClass()`（应用可用堆上限，MB）
+     * @param totalRamMb   **设备总内存**（MB）—— 判断能否装下大模型的主依据
+     * @param memoryClassMb `ActivityManager.getMemoryClass()`（应用 **Java 堆**上限，MB）。
+     *   仅用于展示：onnxruntime 的模型是 **native 常驻，不受 Java 堆上限约束**，
+     *   所以它**不适合**作为「能不能跑大模型」的判据。
      * @param lowRam       系统是否标记为低内存设备
      */
     data class DeviceTier(
         val cores: Int,
-        val memoryClassMb: Int,
-        val lowRam: Boolean,
+        val totalRamMb: Int,
+        val memoryClassMb: Int = 0,
+        val lowRam: Boolean = false,
     ) {
         /** 供 UI 展示的一句话摘要 */
-        fun summary(): String = "$cores 核 · ${memoryClassMb}MB 堆${if (lowRam) " · 低内存设备" else ""}"
+        fun summary(): String {
+            val ram = if (totalRamMb > 0) {
+                val gb = totalRamMb / 1024.0
+                if (gb >= 1) "%.1fGB 内存".format(gb) else "${totalRamMb}MB 内存"
+            } else {
+                "内存未知"
+            }
+            return "$cores 核 · $ram${if (lowRam) " · 低内存设备" else ""}"
+        }
     }
 
     fun detectDevice(context: Context): DeviceTier {
@@ -210,24 +222,50 @@ object ModelCatalog {
         val cores = Runtime.getRuntime().availableProcessors()
         val memoryClass = runCatching { am?.memoryClass ?: 0 }.getOrDefault(0)
         val lowRam = runCatching { am?.isLowRamDevice ?: false }.getOrDefault(false)
-        return DeviceTier(cores = cores, memoryClassMb = memoryClass, lowRam = lowRam)
+        val totalRamMb = runCatching {
+            val info = ActivityManager.MemoryInfo()
+            am?.getMemoryInfo(info)
+            (info.totalMem / (1024L * 1024L)).toInt()
+        }.getOrDefault(0)
+        return DeviceTier(
+            cores = cores,
+            totalRamMb = totalRamMb,
+            memoryClassMb = memoryClass,
+            lowRam = lowRam,
+        )
     }
 
     /**
      * 按设备能力推荐档位。
      *
+     * 判据用**设备总内存**，而不是 `getMemoryClass()`（Java 堆上限）：
+     * 模型是 native 常驻，不受 Java 堆上限约束。
+     *
+     * 实测教训：一台 8 核 / 15.5GB 的机器 `getMemoryClass()` 只报 256MB，
+     * 若以堆上限为门槛会把它误判成中端机、只推荐 78MB 档（真机验证时发现并修正）。
+     *
      * 规则（保守优先，宁可选小不选大 —— 模型下不动或跑不动比准确率略低更伤体验）：
-     * - 低内存设备 或 核心 < 4 或 堆上限 < 192MB  → L1
-     * - 核心 >= 8 且 堆上限 >= 512MB 且 非低内存   → L3
-     * - 其余                                      → L2
+     * - 低内存设备 / 核心 < 4 / 总内存 < 3GB   → L1（29MB）
+     * - 核心 ≥ 8 且 总内存 ≥ 6GB 且 非低内存   → L3（228MB）
+     * - 其余                                   → L2（78MB）
      */
     fun recommend(device: DeviceTier): AsrModelSpec {
-        val l1 = device.lowRam || device.cores < 4 || (device.memoryClassMb in 1..191)
+        val l1 = device.lowRam ||
+            device.cores < 4 ||
+            (device.totalRamMb in 1..(L1_MAX_RAM_MB - 1))
         if (l1) return L1_ZIPFORMER_14M
 
-        val l3 = device.cores >= 8 && device.memoryClassMb >= 512
+        val l3 = device.cores >= 8 &&
+            device.totalRamMb >= L3_MIN_RAM_MB &&
+            !device.lowRam
         return if (l3) L3_SENSE_VOICE else L2_PARAFORMER_SMALL
     }
+
+    /** 总内存低于此值（MB）→ 只推荐 L1 */
+    const val L1_MAX_RAM_MB = 3 * 1024
+
+    /** 总内存达到此值（MB）且核心数 ≥ 8 → 推荐 L3 */
+    const val L3_MIN_RAM_MB = 6 * 1024
 
     /** 推荐理由，直接展示给用户 */
     fun recommendReason(device: DeviceTier, spec: AsrModelSpec): String = when (spec.tier) {

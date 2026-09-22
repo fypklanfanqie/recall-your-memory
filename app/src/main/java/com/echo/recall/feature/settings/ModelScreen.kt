@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -133,8 +134,15 @@ fun ModelScreen(
         }
 
         // ---- 手动导入 ----
-        SectionLabel("手动导入")
+        SectionLabel("维护")
         SectionCard {
+            EchoRow(
+                icon = Icons.Rounded.Refresh,
+                title = "补转写待处理记忆",
+                subtitle = "把「转写中」卡住的记忆重新跑一遍",
+                showChevron = true,
+                onClick = viewModel::transcribePending,
+            )
             EchoRow(
                 icon = Icons.Rounded.Upload,
                 title = "导入模型文件",
@@ -216,8 +224,12 @@ private fun ModelTierRow(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            if (isSelected) {
-                Text("使用中", style = EchoType.caption, color = colors.accent)
+            // 只有「已下载且被选中」才叫「使用中」；仅选中但未下载时如实说明
+            when {
+                isSelected && install.installed ->
+                    Text("使用中", style = EchoType.caption, color = colors.accent)
+                isSelected ->
+                    Text("已选 · 待下载", style = EchoType.caption, color = colors.secondaryLabel)
             }
         }
 
@@ -241,18 +253,20 @@ private fun ModelTierRow(
             Text("推荐给你的设备", style = EchoType.footnote, color = colors.accent)
         }
 
-        if (isDownloading && downloadState is ModelState.Downloading) {
+        // 进度：只在「正在下载的确实是这一档」时展示
+        val active = (downloadState as? ModelState.Downloading)?.takeIf { it.modelId == spec.id }
+        if (active != null) {
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
-                progress = { downloadState.overallPercent / 100f },
+                progress = { active.overallPercent / 100f },
                 modifier = Modifier.fillMaxWidth(),
                 color = colors.accent,
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "${"%.1f".format(downloadState.fileBytes / 1024.0 / 1024.0)} / " +
-                    "${"%.1f".format(downloadState.fileTotal / 1024.0 / 1024.0)} MB · " +
-                    "总进度 ${downloadState.overallPercent}%",
+                text = "${"%.1f".format(active.fileBytes / 1024.0 / 1024.0)} / " +
+                    "${"%.1f".format(active.fileTotal / 1024.0 / 1024.0)} MB · " +
+                    "总进度 ${active.overallPercent}%",
                 style = EchoType.footnote,
                 color = colors.secondaryLabel,
             )
