@@ -405,3 +405,34 @@ NoteEntity(id, title, content, createdAt, updatedAt, pinned, aiVersionsJson?)
 **顺带修掉一个回归（v1.1 自己引入的）**：本地模型下载**看不到进度**。
 `ModelScreenState.download` 是 `refresh()` 里的**一次性快照**，而下载期间是 `ModelManager` 在持续发射 `Downloading`，UI 从不更新。
 改为直接订阅活的 `viewModel.state`，并把该字段从快照里删除以防再犯。下载快得离谱（29MB≈3s、78MB≈1s，hf-mirror CDN 约 25–80MB/s），adb 截图采样抓不到，故在 `ModelManager` 加每 10% 一条日志用于验证与日后排查。
+
+### 14.6 模型下载「无法写入」真因：并发下载互相破坏（2026-09）
+
+用户反馈「L2 能下、L3 不能下，报无法写入」。真机取证（日志交错在**两个线程**上）：
+
+```
+20505 I ModelManager: sense-voice-small/model.int8.onnx ready (239233841 bytes)
+20486 E ModelManager: java.io.IOException: 无法写入 model.int8.onnx
+...随后 20505 继续把 tokens.txt 下完
+```
+
+磁盘结果：`sense-voice/` 里**只有 `tokens.txt`，模型文件不见了**。
+
+**根因**：`ModelManager.download()` **没有并发保护**，而下载流程里的「校验 → 删旧目标 → `.part` 改名」是**破坏性的读改写**。两个协程同时下同一个模型时：
+
+1. A 先 `renameTo` 成功 → 目标文件就位
+2. B 执行 `if (target.exists()) target.delete()` → **把 A 的成品删掉**
+3. B 再 `renameTo` → `.part` 已被 A 消费掉 → 返回 false → 报「无法写入」
+4. B 中止；A 继续下 `tokens.txt` → 最终只剩 tokens.txt
+
+**为什么会被触发**：正因为它上一个 bug（进度不显示），用户看不到任何进展就**又点了一次下载** → 两个并发下载。两个 bug 是连锁的。
+
+**修法**：`ModelManager.download` 加 `Mutex` 串行化（并保留一个私有 `downloadLocked`）；`ModelViewModel.download` 在已有下载时直接提示「正在下载中（x%），请稍候」，不再排队第二个。
+
+**真机验证**：L3 连点两次 → **只有单一线程**下载，`model.int8.onnx ready (239233841 bytes)`、无失败；`tokens.txt` 已存在被正确跳过；L3 现为完整安装。
+
+### 14.7 使用指南页（2026-09）
+
+首页右上角新增「使用指南」入口（`ScreenHeader.actions`），跳转新页面 `feature/guide/GuideScreen.kt`。
+内容按「怎么用」组织：快速上手 3 步 → 8 个功能分节（聆听 / 回溯 / 本地转写 / AI 联动 / 收藏待办备忘 / 外观 / 续航保活 / 隐私）→ 常见问题 3 条。
+其中「常见问题」直接收录了本轮真实踩到的坑（转写卡住、下载无法写入、模糊调 0 仍磨砂、后台被杀），方便用户自助排查。

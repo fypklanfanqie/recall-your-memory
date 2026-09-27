@@ -88,6 +88,13 @@ class ModelViewModel @Inject constructor(
     }
 
     fun download(spec: AsrModelSpec) {
+        // 已有下载在跑就不要再排一个：并发下同一个 `.part` 会被互相破坏
+        // （ModelManager 侧也有 Mutex，这里是给用户一个明确提示 + 省掉一次无谓排队）
+        val busy = modelManager.state.value as? ModelState.Downloading
+        if (busy != null) {
+            _messages.tryEmit("「${busy.modelId}」正在下载中（${busy.overallPercent}%），请稍候")
+            return
+        }
         viewModelScope.launch {
             val result = modelManager.download(spec)
             if (result.isSuccess) {

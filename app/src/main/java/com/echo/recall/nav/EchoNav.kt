@@ -53,6 +53,7 @@ import com.echo.recall.feature.memory.MemoryDetailScreen
 import com.echo.recall.feature.memory.MemoryDetailViewModel
 import com.echo.recall.feature.memory.MemoryHomeScreen
 import com.echo.recall.feature.notes.NotesScreen
+import com.echo.recall.feature.guide.GuideScreen
 import com.echo.recall.feature.settings.AboutScreen
 import com.echo.recall.feature.settings.AppStateViewModel
 import com.echo.recall.feature.settings.KeepAliveScreen
@@ -85,6 +86,7 @@ object EchoRoutes {
     const val PROVIDERS = "providers"
     const val KEEPALIVE = "keepalive"
     const val ABOUT = "about"
+    const val GUIDE = "guide"
     const val WALLPAPER_CROP_ARG = "cropUri"
     const val WALLPAPER_CROP = "wallpaperCrop/{$WALLPAPER_CROP_ARG}"
 
@@ -145,9 +147,12 @@ fun EchoNavHost(
                             },
                         ) {
                             composable(EchoTab.MEMORY.route) {
-                                MemoryHomeScreen(onOpenMemory = { id ->
-                                    navController.navigate(EchoRoutes.memoryDetail(id))
-                                })
+                                MemoryHomeScreen(
+                                    onOpenMemory = { id ->
+                                        navController.navigate(EchoRoutes.memoryDetail(id))
+                                    },
+                                    onOpenGuide = { navController.navigate(EchoRoutes.GUIDE) },
+                                )
                             }
                             composable(EchoTab.FAVORITES.route) {
                                 FavoritesScreen(onOpenMemory = { id ->
@@ -190,6 +195,9 @@ fun EchoNavHost(
                             }
                             composable(EchoRoutes.ABOUT) {
                                 AboutScreen(onBack = { navController.popBackStack() })
+                            }
+                            composable(EchoRoutes.GUIDE) {
+                                GuideScreen(onBack = { navController.popBackStack() })
                             }
                             composable(EchoRoutes.MODELS) {
                                 ModelScreen(onBack = { navController.popBackStack() })

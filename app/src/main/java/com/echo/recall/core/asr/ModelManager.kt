@@ -8,6 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -65,6 +67,9 @@ class ModelManager @Inject constructor(
 
     private val _state = MutableStateFlow<ModelState>(ModelState.NotReady)
     val state: StateFlow<ModelState> = _state.asStateFlow()
+
+    /** 串行化下载，避免并发下同一个 `.part` 互相破坏（见 [download] 注释） */
+    private val downloadMutex = Mutex()
 
     /** 当前选中的模型 id（默认取推荐档，由 [initSelection] 决定） */
     private val _selectedId = MutableStateFlow(ModelCatalog.LEGACY_DEFAULT_ID)
@@ -127,7 +132,25 @@ class ModelManager @Inject constructor(
         _state.value = if (isReady()) ModelState.Ready else ModelState.NotReady
     }
 
-    suspend fun download(spec: AsrModelSpec = selectedSpec): Result<Unit> = withContext(Dispatchers.IO) {
+    /**
+     * 下载模型（**串行化**）。
+     *
+     * 为什么要加锁：一次下载里的「校验 → 删旧目标 → `.part` 改名」是**破坏性的读改写**。
+     * 两个协程同时下同一个模型时会共用同一个 `.part`，于是：
+     * A 先 `renameTo` 成功 → B 执行 `target.delete()` **把 A 的成品删掉** → B 再
+     * `renameTo` 时 `.part` 已被 A 消费掉 → 返回 false → 报「无法写入」。
+     *
+     * 真机实证（同一模型的日志交错在两个线程上）：
+     * ```
+     * 20505 I ModelManager: sense-voice-small/model.int8.onnx ready (239233841 bytes)
+     * 20486 E ModelManager: java.io.IOException: 无法写入 model.int8.onnx
+     * ```
+     * 结果磁盘上只剩 `tokens.txt`、模型文件被删。加锁后并发调用会排队而不是互相破坏。
+     */
+    suspend fun download(spec: AsrModelSpec = selectedSpec): Result<Unit> =
+        downloadMutex.withLock { downloadLocked(spec) }
+
+    private suspend fun downloadLocked(spec: AsrModelSpec): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val dir = dirFor(spec)
             for ((index, file) in spec.files.withIndex()) {

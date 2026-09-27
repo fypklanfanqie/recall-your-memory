@@ -31,8 +31,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MicOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,6 +81,7 @@ import com.kyant.shapes.Capsule
 @Composable
 fun MemoryHomeScreen(
     onOpenMemory: (String) -> Unit,
+    onOpenGuide: () -> Unit = {},
     viewModel: MemoryViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -137,6 +141,16 @@ fun MemoryHomeScreen(
                     ScreenHeader(
                         title = stringResource(R.string.memory_title),
                         subtitle = stringResource(R.string.memory_window, settings.windowLabel()),
+                        actions = {
+                            // 右上角「使用指南」入口
+                            IconButton(onClick = onOpenGuide) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MenuBook,
+                                    contentDescription = "使用指南",
+                                    tint = colors.accent,
+                                )
+                            }
+                        },
                     )
                 }
 
