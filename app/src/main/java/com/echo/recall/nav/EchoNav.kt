@@ -108,8 +108,8 @@ fun EchoNavHost(
     val glassParams = GlassParams(
         mode = GlassMode.fromId(settings.glassMode),
         blurRadiusDp = settings.glassBlurDp,
-        refractionHeightDp = settings.glassRefractionHeightDp,
-        refractionAmountDp = settings.glassRefractionAmountDp,
+        refractionHeightFraction = settings.glassRefractionHeightFraction,
+        refractionAmountFraction = settings.glassRefractionAmountFraction,
         chromaticAberration = settings.glassChromatic,
         highlightAlpha = settings.glassHighlight,
         tintAlpha = settings.glassTint,

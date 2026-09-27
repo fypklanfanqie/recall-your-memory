@@ -63,6 +63,10 @@ fun ModelScreen(
     val colors = LocalEchoColors.current
     val screen by viewModel.screen.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
+    // 下载状态必须订阅「活的」StateFlow：ModelManager 在下载过程中会持续发射
+    // Downloading(进度)。若只读 refresh() 里的一次性快照，整个下载期间 UI 都不会更新
+    // （回归 bug：点下载后一直显示「下载（29 MB）」，看不到任何进度）。
+    val downloadState by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { context.toast(it) }
@@ -125,7 +129,7 @@ fun ModelScreen(
                     install = install,
                     isSelected = install.spec.id == screen.selectedId,
                     isRecommended = install.spec.id == screen.recommendedId,
-                    downloadState = screen.download,
+                    downloadState = downloadState,
                     onSelect = viewModel::select,
                     onDownload = viewModel::download,
                     onDelete = viewModel::delete,
@@ -256,17 +260,31 @@ private fun ModelTierRow(
         // 进度：只在「正在下载的确实是这一档」时展示
         val active = (downloadState as? ModelState.Downloading)?.takeIf { it.modelId == spec.id }
         if (active != null) {
+            val doneMb = active.fileBytes / 1024.0 / 1024.0
+            val totalMb = active.fileTotal / 1024.0 / 1024.0
+            // 单文件占比（文件大小不一，只看总进度会显得「卡住」）
+            val fileFraction = if (active.fileTotal > 0) {
+                (active.fileBytes.toDouble() / active.fileTotal).coerceIn(0.0, 1.0)
+            } else {
+                0.0
+            }
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
                 progress = { active.overallPercent / 100f },
                 modifier = Modifier.fillMaxWidth(),
                 color = colors.accent,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = "${"%.1f".format(active.fileBytes / 1024.0 / 1024.0)} / " +
-                    "${"%.1f".format(active.fileTotal / 1024.0 / 1024.0)} MB · " +
-                    "总进度 ${active.overallPercent}%",
+                text = "总进度 ${active.overallPercent}%",
+                style = EchoType.footnote,
+                color = colors.accent,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "正在下载 ${active.fileName} · " +
+                    "${"%.1f".format(doneMb)} / ${"%.1f".format(totalMb)} MB " +
+                    "(${(fileFraction * 100).toInt()}%)",
                 style = EchoType.footnote,
                 color = colors.secondaryLabel,
             )

@@ -375,3 +375,33 @@ NoteEntity(id, title, content, createdAt, updatedAt, pinned, aiVersionsJson?)
 - 两级触发门在真机上正常放行真实人声（窗口内累计人声秒数正常增长）
 
 **仍未验证（如实记录）**：省电百分比需过夜 soak 实测（`tools/verify-device.ps1 -SoakHours 8`）；L2（Paraformer）档未在真机下载验证；`VAD_SKIP` 极致省电档的边界未实测。
+
+### 14.5 液态玻璃：按官方仓库重新对齐（2026-09）
+
+用户反馈「模糊调到 0 还是像毛玻璃」「色散不生效」，要求**完全照 Kyant0/AndroidLiquidGlass 移植**。
+先核对：`git diff 1235137..HEAD -- core/designsystem` 为空 —— 这两个问题**都是 v1.0 就存在的**，不是本轮改动引入。
+
+真机取证（Xiaomi 8 核 / API 36 / Android 16）：
+
+| 现象 | 根因（对照官方源码） | 修法 |
+|------|---------------------|------|
+| 模糊调到 0 仍像毛玻璃 | `GlassDock` 写死 `maxOf(blurRadiusDp, 22f)` —— Dock（最显眼的玻璃）**永远至少 22dp 厚霜**，滑块等于失效 | 改为直接用设置值，不设下限；可读性靠 surface 透明度兜底 |
+| 同上（毛玻璃档） | `GlassHost` 毛玻璃分支 `coerceAtLeast(1.dp)` 偷偷加模糊 | 模糊为 0 就不模糊 |
+| **色散看不见** | ① 折射用**绝对 dp**，用户存的是 **3dp** → 折射带仅 ~2dp，红蓝分离落到亚像素级别；② 从未传 `depthEffect`（官方 Playground 传 `true`）；③ 首页最大按钮 `HeroRecallButton` **根本不是玻璃**（只是渐变胶囊），不可能有折射/色散 | 折射改为**比例 × 元素尺寸**（官方公式 `frac × minDimension × 0.5` / `frac × minDimension`），补 `depthEffect = true`，所有玻璃面统一传 `chromaticAberration` |
+| 各玻璃面行为不一致 | `liquidGlassSurface` 是**死代码**（无人调用），每个玻璃面各写一份 `drawBackdrop`，必然漂移 | 收敛为唯一实现，Dock / 药丸全部改走它 |
+
+**官方依据**（照抄，非自创）：
+
+- 效果顺序必须是 `color filter ⇒ blur ⇒ lens`（官方文档 [Backdrop effects](https://kyant.gitbook.io/backdrop/api/backdrop-effects)）
+- `refractionHeight ∈ [0, shape.minCornerRadius]`、`refractionAmount ∈ [0, size.minDimension]`；**用比例天然满足上界**
+- `lens(refractionHeight, refractionAmount, depthEffect = false, chromaticAberration = false)` —— 色散会切换到 `RefractionWithDispersion` 着色器
+- 官方 `BackdropDemoScaffold` 只把**壁纸图片**录进 backdrop、所有玻璃都是它的**兄弟节点** —— 这正好解释了本项目的「铁律 1」，也说明**首页大按钮要变真玻璃，必须改录制边界**
+
+**设置项语义变更（含迁移）**：折射从「绝对 dp」改为「比例 %」（默认 20%，与官方一致）。
+旧值按 `dp / 120` 迁移（旧默认 24dp → 新默认 0.2）。另照官方 Playground 补了**「恢复官方默认参数」**按钮 —— 用户存的是 3dp，迁移后仍过小，一键可回到可见量级。
+
+**已知未做（需用户确认后再动）**：`HeroRecallButton`（首页中央大按钮）目前仍**不是玻璃**，README/PLAN 里「液态玻璃回溯大按钮」的说法与实现不符。要让它变真玻璃，必须按官方把录制边界从「全部内容」改成「只有背景壁纸」—— 结构性改动，且会改变玻璃的折射对象（由「折射页面内容」变为「折射壁纸」，与 README「玻璃折射效果随壁纸呈现」的原意一致）。因本机无法看图验证视觉结果，未擅自改动。
+
+**顺带修掉一个回归（v1.1 自己引入的）**：本地模型下载**看不到进度**。
+`ModelScreenState.download` 是 `refresh()` 里的**一次性快照**，而下载期间是 `ModelManager` 在持续发射 `Downloading`，UI 从不更新。
+改为直接订阅活的 `viewModel.state`，并把该字段从快照里删除以防再犯。下载快得离谱（29MB≈3s、78MB≈1s，hf-mirror CDN 约 25–80MB/s），adb 截图采样抓不到，故在 `ModelManager` 加每 10% 一条日志用于验证与日后排查。

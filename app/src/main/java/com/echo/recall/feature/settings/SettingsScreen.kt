@@ -172,35 +172,44 @@ fun SettingsScreen(
                 onSelect = { viewModel.setGlassMode(GlassMode.entries[it].name) },
             )
             if (resolved != GlassMode.PLAIN) {
+                val blurDp = settings.glassBlurDp
                 EchoSliderRow(
                     title = "模糊半径",
-                    subtitle = "背景磨砂程度",
-                    value = settings.glassBlurDp,
+                    subtitle = if (blurDp <= 0.5f) {
+                        "已关闭模糊：背景完全清晰（折射/染色仍按各自滑块生效）"
+                    } else {
+                        "背景磨砂程度 · 调到 0 即为完全清晰"
+                    },
+                    value = blurDp,
                     valueRange = 0f..40f,
-                    valueLabel = "${settings.glassBlurDp.roundToInt()} dp",
+                    valueLabel = if (blurDp <= 0.5f) "0 dp（无模糊）" else "${blurDp.roundToInt()} dp",
                     onValueChange = viewModel::setGlassBlur,
                 )
             }
             if (resolved == GlassMode.LIQUID) {
                 EchoSliderRow(
                     title = "折射高度",
-                    subtitle = "边缘多大范围发生折射",
-                    value = settings.glassRefractionHeightDp,
-                    valueRange = 0f..40f,
-                    valueLabel = "${settings.glassRefractionHeightDp.roundToInt()} dp",
+                    subtitle = "边缘多大范围发生折射（占元素尺寸的比例）",
+                    value = settings.glassRefractionHeightFraction,
+                    valueRange = 0f..EchoSettings.MAX_REFRACTION_FRACTION,
+                    valueLabel = "${(settings.glassRefractionHeightFraction * 100).roundToInt()}%",
                     onValueChange = viewModel::setGlassRefractionHeight,
                 )
                 EchoSliderRow(
                     title = "折射强度",
-                    subtitle = "边缘弯曲程度",
-                    value = settings.glassRefractionAmountDp,
-                    valueRange = 0f..40f,
-                    valueLabel = "${settings.glassRefractionAmountDp.roundToInt()} dp",
+                    subtitle = "边缘弯曲程度（色散要看得见，这项不能太小）",
+                    value = settings.glassRefractionAmountFraction,
+                    valueRange = 0f..EchoSettings.MAX_REFRACTION_FRACTION,
+                    valueLabel = "${(settings.glassRefractionAmountFraction * 100).roundToInt()}%",
                     onValueChange = viewModel::setGlassRefractionAmount,
                 )
                 EchoSwitchRow(
                     title = "色散",
-                    subtitle = "玻璃边缘的红蓝光谱分离",
+                    subtitle = if (settings.glassChromatic) {
+                        "玻璃边缘的红蓝光谱分离（需折射高度/强度足够大才明显）"
+                    } else {
+                        "已关闭色散：玻璃边缘不再分离红蓝光谱"
+                    },
                     checked = settings.glassChromatic,
                     onCheckedChange = viewModel::setGlassChromatic,
                 )
@@ -218,6 +227,15 @@ fun SettingsScreen(
                 valueRange = 0f..1f,
                 valueLabel = "${(settings.glassTint * 100).roundToInt()}%",
                 onValueChange = viewModel::setGlassTint,
+            )
+            // 对应官方示例里的 Reset：一键回到官方量级的折射参数。
+            // 折射过低时色散不可见，这个按钮是最省事的恢复方式。
+            EchoRow(
+                icon = Icons.Rounded.RestartAlt,
+                title = "恢复官方默认参数",
+                subtitle = "模糊 18dp · 折射 20% · 色散开（折射太低时色散看不见）",
+                showChevron = true,
+                onClick = viewModel::resetGlassDefaults,
             )
             EchoSegmentedRow(
                 icon = Icons.Rounded.Tune,

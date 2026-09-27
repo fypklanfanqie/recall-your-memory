@@ -35,7 +35,8 @@ data class ModelScreenState(
     val recommendReason: String = "",
     val selectedId: String = "",
     val installs: List<ModelInstall> = emptyList(),
-    val download: ModelState = ModelState.NotReady,
+    // 注意：这里**不放下载状态**。下载进度是高频流，必须直接订阅 [ModelViewModel.state]，
+    // 放进这种「按需刷新」的快照里会在整个下载期间都是陈旧值（曾因此丢失进度显示）。
     val totalUsedBytes: Long = 0L,
 )
 
@@ -69,7 +70,6 @@ class ModelViewModel @Inject constructor(
                 recommendReason = ModelCatalog.recommendReason(device, recommended),
                 selectedId = modelManager.selectedId.value,
                 installs = withContext(Dispatchers.IO) { modelManager.installs() },
-                download = modelManager.state.value,
                 totalUsedBytes = withContext(Dispatchers.IO) { modelManager.usedBytes() },
             )
             modelManager.refreshState()

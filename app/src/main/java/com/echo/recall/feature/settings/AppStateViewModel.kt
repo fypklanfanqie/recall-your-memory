@@ -67,9 +67,12 @@ class AppStateViewModel @Inject constructor(
 
     fun setGlassBlur(dp: Float) = viewModelScope.launch { settingsRepository.setGlassBlur(dp) }
 
-    fun setGlassRefractionHeight(dp: Float) = viewModelScope.launch { settingsRepository.setGlassRefractionHeight(dp) }
+    fun setGlassRefractionHeight(fraction: Float) = viewModelScope.launch { settingsRepository.setGlassRefractionHeight(fraction) }
 
-    fun setGlassRefractionAmount(dp: Float) = viewModelScope.launch { settingsRepository.setGlassRefractionAmount(dp) }
+    fun setGlassRefractionAmount(fraction: Float) = viewModelScope.launch { settingsRepository.setGlassRefractionAmount(fraction) }
+
+    /** 恢复官方（Kyant0 Playground）默认玻璃参数（对应官方示例里的 Reset 按钮） */
+    fun resetGlassDefaults() = viewModelScope.launch { settingsRepository.resetGlassDefaults() }
 
     fun setGlassChromatic(enabled: Boolean) = viewModelScope.launch { settingsRepository.setGlassChromatic(enabled) }
 

@@ -63,6 +63,7 @@ import com.echo.recall.core.designsystem.component.toast
 import com.echo.recall.core.designsystem.glass.GlassHost
 import com.echo.recall.core.designsystem.glass.LocalEchoBackdrop
 import com.echo.recall.core.designsystem.glass.LocalGlassParams
+import com.echo.recall.core.designsystem.glass.liquidGlassSurface
 import com.echo.recall.core.designsystem.theme.EchoType
 import com.echo.recall.core.designsystem.theme.LocalEchoColors
 import com.echo.recall.core.permission.EchoPermissions
@@ -243,32 +244,16 @@ fun MemoryHomeScreen(
 @Composable
 private fun GlassPill(text: String, onClick: () -> Unit) {
     val colors = LocalEchoColors.current
-    val backdrop = LocalEchoBackdrop.current
-    val params = LocalGlassParams.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Box(
         modifier = Modifier
-            .then(
-                if (backdrop != null) {
-                    Modifier.drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { Capsule() },
-                        effects = {
-                            if (!size.isSpecified) return@drawBackdrop
-                            vibrancy()
-                            blur(params.blurRadiusDp.dp.toPx() * 0.6f)
-                            lens(
-                                params.refractionHeightDp.dp.toPx() * 0.6f,
-                                params.refractionAmountDp.dp.toPx() * 0.6f,
-                                chromaticAberration = params.chromaticAberration,
-                            )
-                        },
-                        onDrawSurface = { drawRect(colors.surface.copy(alpha = 0.28f + params.tintAlpha * 0.2f)) },
-                    )
-                } else {
-                    Modifier
-                        .background(colors.surface.copy(alpha = 0.92f), Capsule())
-                },
+            // 统一走 liquidGlassSurface（全 App 唯一玻璃实现，语义对齐官方示例）。
+            // v1.0 这里是自己写的一份 drawBackdrop，参数被乘 0.6 后折射带过窄，
+            // 色散因此不可见；现在改用官方的「比例 × 尺寸」公式。
+            .liquidGlassSurface(
+                shape = Capsule(),
+                surfaceColor = colors.surface,
+                refraction = true,
             )
             .clickable {
                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick)

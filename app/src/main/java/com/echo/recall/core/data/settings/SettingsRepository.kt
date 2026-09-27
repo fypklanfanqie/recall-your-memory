@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.echo.recall.core.designsystem.glass.GlassParams
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -33,8 +34,11 @@ class SettingsRepository @Inject constructor(
         val recordingEnabled = booleanPreferencesKey("recording_enabled")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val glassBlur = floatPreferencesKey("glass_blur_dp")
-        val glassRefractionHeight = floatPreferencesKey("glass_refraction_height_dp")
-        val glassRefractionAmount = floatPreferencesKey("glass_refraction_amount_dp")
+        /** 新版：折射比例（0..1）。旧版是 dp，用 [legacyRefractionHeight]/[legacyRefractionAmount] 迁移 */
+        val glassRefractionHeight = floatPreferencesKey("glass_refraction_height_frac")
+        val glassRefractionAmount = floatPreferencesKey("glass_refraction_amount_frac")
+        val legacyRefractionHeight = floatPreferencesKey("glass_refraction_height_dp")
+        val legacyRefractionAmount = floatPreferencesKey("glass_refraction_amount_dp")
         val glassChromatic = booleanPreferencesKey("glass_chromatic")
         val glassHighlight = floatPreferencesKey("glass_highlight")
         val glassTint = floatPreferencesKey("glass_tint")
@@ -62,8 +66,11 @@ class SettingsRepository @Inject constructor(
             recordingEnabled = prefs[Keys.recordingEnabled] ?: false,
             onboardingDone = prefs[Keys.onboardingDone] ?: false,
             glassBlurDp = prefs[Keys.glassBlur] ?: 18f,
-            glassRefractionHeightDp = prefs[Keys.glassRefractionHeight] ?: 24f,
-            glassRefractionAmountDp = prefs[Keys.glassRefractionAmount] ?: 24f,
+            // 迁移：旧版存绝对 dp（默认 24dp）→ 新版存比例（默认 0.2）
+            glassRefractionHeightFraction = prefs[Keys.glassRefractionHeight]
+                ?: GlassParams.legacyDpToFraction(prefs[Keys.legacyRefractionHeight] ?: 24f),
+            glassRefractionAmountFraction = prefs[Keys.glassRefractionAmount]
+                ?: GlassParams.legacyDpToFraction(prefs[Keys.legacyRefractionAmount] ?: 24f),
             glassChromatic = prefs[Keys.glassChromatic] ?: true,
             glassHighlight = prefs[Keys.glassHighlight] ?: 0.7f,
             glassTint = prefs[Keys.glassTint] ?: 0.25f,
@@ -120,12 +127,33 @@ class SettingsRepository @Inject constructor(
         context.echoSettingsStore.edit { it[Keys.glassBlur] = dp.coerceIn(0f, 40f) }
     }
 
-    suspend fun setGlassRefractionHeight(dp: Float) {
-        context.echoSettingsStore.edit { it[Keys.glassRefractionHeight] = dp.coerceIn(0f, 40f) }
+    suspend fun setGlassRefractionHeight(fraction: Float) {
+        context.echoSettingsStore.edit {
+            it[Keys.glassRefractionHeight] = fraction.coerceIn(0f, EchoSettings.MAX_REFRACTION_FRACTION)
+        }
     }
 
-    suspend fun setGlassRefractionAmount(dp: Float) {
-        context.echoSettingsStore.edit { it[Keys.glassRefractionAmount] = dp.coerceIn(0f, 40f) }
+    suspend fun setGlassRefractionAmount(fraction: Float) {
+        context.echoSettingsStore.edit {
+            it[Keys.glassRefractionAmount] = fraction.coerceIn(0f, EchoSettings.MAX_REFRACTION_FRACTION)
+        }
+    }
+
+    /**
+     * 恢复官方（Kyant0 Playground）默认参数。
+     *
+     * 需要的场景：折射高度/强度被调到过小（例如旧版遗留的 3dp）时，
+     * 色散的红蓝分离会落到亚像素级别、完全看不见 —— 一键回到官方量级。
+     */
+    suspend fun resetGlassDefaults() {
+        context.echoSettingsStore.edit { prefs ->
+            prefs[Keys.glassBlur] = EchoSettings.DEFAULT_GLASS_BLUR_DP
+            prefs[Keys.glassRefractionHeight] = EchoSettings.DEFAULT_REFRACTION_FRACTION
+            prefs[Keys.glassRefractionAmount] = EchoSettings.DEFAULT_REFRACTION_FRACTION
+            prefs[Keys.glassChromatic] = true
+            prefs[Keys.glassHighlight] = 0.7f
+            prefs[Keys.glassTint] = EchoSettings.DEFAULT_GLASS_TINT
+        }
     }
 
     suspend fun setGlassChromatic(enabled: Boolean) {

@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastRoundToInt
 import com.echo.recall.core.designsystem.glass.GlassMode
+import com.echo.recall.core.designsystem.glass.GlassParams
 import com.echo.recall.core.designsystem.glass.LocalEchoBackdrop
 import com.echo.recall.core.designsystem.glass.LocalGlassMode
 import com.echo.recall.core.designsystem.glass.LocalGlassParams
@@ -112,12 +113,16 @@ fun GlassDock(
 
         if (isLiquid && screenBackdrop != null) {
             val dockShape = RoundedCornerShape(EchoRadius.dock)
-            // 厚霜玻璃：模糊取设置值与 22dp 的较大者，表面更实，避免「截断」的生硬透视
-            val dockBlur = maxOf(params.blurRadiusDp, 22f)
+            // 模糊必须「所见即所得」：直接用设置值，**不设下限**。
+            // v1.0 这里写的是 maxOf(blurRadiusDp, 22f)，于是把「模糊半径」调到 0 时
+            // Dock 依然被强制 22dp 厚霜 —— 用户看到的还是毛玻璃（真机反馈的 bug）。
+            // 可读性靠 surface 透明度兜底，而不是偷偷加模糊。
+            val dockBlur = params.blurRadiusDp.coerceIn(GlassParams.MIN_BLUR, GlassParams.MAX_BLUR)
             val containerColor = colors.surface.copy(alpha = 0.45f)
             val tabsBackdrop = rememberLayerBackdrop()
 
             // 1) 可见的玻璃 Dock 行（承载点击）
+            //    折射用「比例 × 尺寸」（官方公式），保证色散的红蓝分离有足够宽的折射带
             Row(
                 Modifier
                     .fillMaxSize()
@@ -127,10 +132,13 @@ fun GlassDock(
                         effects = {
                             if (!size.isSpecified) return@drawBackdrop
                             vibrancy()
-                            blur(dockBlur.dp.toPx())
+                            if (dockBlur > 0f) blur(dockBlur.dp.toPx())
+                            val minDimension = size.minDimension
                             lens(
-                                params.refractionHeightDp.dp.toPx() * 0.5f,
-                                params.refractionAmountDp.dp.toPx() * 0.5f,
+                                refractionHeight = params.refractionHeightFraction * minDimension * 0.5f,
+                                refractionAmount = params.refractionAmountFraction * minDimension,
+                                depthEffect = true,
+                                chromaticAberration = params.chromaticAberration,
                             )
                         },
                         onDrawSurface = { drawRect(containerColor) },
@@ -155,7 +163,7 @@ fun GlassDock(
                         effects = {
                             if (!size.isSpecified) return@drawBackdrop
                             vibrancy()
-                            blur(params.blurRadiusDp.dp.toPx() * 0.5f)
+                            if (dockBlur > 0f) blur(dockBlur.dp.toPx() * 0.5f)
                         },
                         onDrawSurface = { drawRect(containerColor) },
                     )

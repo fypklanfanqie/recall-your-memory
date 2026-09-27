@@ -259,18 +259,27 @@ class ModelManager @Inject constructor(
                 body.byteStream().use { input ->
                     val buffer = ByteArray(1 shl 16)
                     var written = startBytes
+                    // 每跨过 10% 打一条日志：下载常快到肉眼/截图抓不住，
+                    // 有这行才能在 logcat 里确认进度确实在推进（排查「看不到进度」用）。
+                    var lastLoggedDecile = -1
                     while (true) {
                         val read = input.read(buffer)
                         if (read <= 0) break
                         raf.write(buffer, 0, read)
                         written += read
+                        val percent = overallPercent(spec, index, written, knownTotal)
                         _state.value = ModelState.Downloading(
                             modelId = spec.id,
                             fileName = file.name,
                             fileBytes = written,
                             fileTotal = knownTotal,
-                            overallPercent = overallPercent(spec, index, written, knownTotal),
+                            overallPercent = percent,
                         )
+                        val decile = percent / 10
+                        if (decile > lastLoggedDecile) {
+                            lastLoggedDecile = decile
+                            Log.i(TAG, "${spec.id}/${file.name} ${percent}% ($written/$knownTotal)")
+                        }
                     }
                 }
             }

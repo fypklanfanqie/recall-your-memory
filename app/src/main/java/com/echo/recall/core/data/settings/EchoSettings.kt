@@ -29,13 +29,15 @@ data class EchoSettings(
     val autoSummary: Boolean = false,
     val recordingEnabled: Boolean = false,
     val onboardingDone: Boolean = false,
-    // ---- 液态玻璃可调参数（参考 Kyant0/AndroidLiquidGlass 的效果模型） ----
-    val glassBlurDp: Float = 18f,
-    val glassRefractionHeightDp: Float = 24f,
-    val glassRefractionAmountDp: Float = 24f,
+    // ---- 液态玻璃可调参数（语义严格对齐官方 Kyant0 Playground） ----
+    val glassBlurDp: Float = DEFAULT_GLASS_BLUR_DP,
+    /** 折射高度比例：refractionHeight = fraction × minDimension × 0.5 */
+    val glassRefractionHeightFraction: Float = DEFAULT_REFRACTION_FRACTION,
+    /** 折射强度比例：refractionAmount = fraction × minDimension */
+    val glassRefractionAmountFraction: Float = DEFAULT_REFRACTION_FRACTION,
     val glassChromatic: Boolean = true,
     val glassHighlight: Float = 0.7f,
-    val glassTint: Float = 0.25f,
+    val glassTint: Float = DEFAULT_GLASS_TINT,
     // ---- 背景（空 = 默认渐变光斑） ----
     val backgroundImagePath: String = "",
 ) {
@@ -55,6 +57,16 @@ data class EchoSettings(
         /** 连续静默多久后进入 COOLDOWN / SAVER 停读 */
         const val SILENCE_COOLDOWN_MS = 3_000L
         const val SILENCE_DEEP_MS = 30_000L
+
+        /** 与官方 Playground 一致的默认折射比例 */
+        const val DEFAULT_REFRACTION_FRACTION = 0.2f
+
+        /** 折射比例上限（0..1；1.0 时 refractionAmount = 整个短边） */
+        const val MAX_REFRACTION_FRACTION = 1f
+
+        /** 玻璃默认值（「恢复官方默认参数」用它） */
+        const val DEFAULT_GLASS_BLUR_DP = 18f
+        const val DEFAULT_GLASS_TINT = 0.25f
 
         fun formatWindow(minutes: Float): String {
             val totalSeconds = (minutes * 60f).toInt()

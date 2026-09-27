@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
@@ -65,13 +66,33 @@ fun resolveGlassMode(userMode: GlassMode, sdkInt: Int = Build.VERSION.SDK_INT): 
         GlassMode.PLAIN -> GlassMode.PLAIN
     }
 
-/** 液态参数（设置页可调） */
+/**
+ * 液态参数（设置页可调）。
+ *
+ * ⚠ 折射用「**相对尺寸的比例**」而不是绝对 dp —— 这是照搬官方 Playground 的做法：
+ * ```
+ * lens(
+ *     refractionHeight = fraction * minDimension * 0.5f,
+ *     refractionAmount = fraction * minDimension,
+ *     depthEffect = true,
+ *     chromaticAberration = <开关>,
+ * )
+ * ```
+ * 官方文档要求 `refractionHeight ∈ [0, shape.minCornerRadius]`、
+ * `refractionAmount ∈ [0, size.minDimension]`。用比例恰好天然满足这两个上界，
+ * 且效果随元素尺寸自适应。
+ *
+ * 反面教材（v1.0 的实际 bug）：折射用绝对 dp（用户设成了 3dp），
+ * 于是折射带只有 ~2dp 宽，色散的红蓝分离落在亚像素级别 → **完全看不见**。
+ */
 @Immutable
 data class GlassParams(
     val mode: GlassMode = GlassMode.LIQUID,
     val blurRadiusDp: Float = 18f,
-    val refractionHeightDp: Float = 24f,
-    val refractionAmountDp: Float = 24f,
+    /** 折射高度比例：refractionHeight = fraction × minDimension × 0.5 */
+    val refractionHeightFraction: Float = DEFAULT_REFRACTION_FRACTION,
+    /** 折射强度比例：refractionAmount = fraction × minDimension */
+    val refractionAmountFraction: Float = DEFAULT_REFRACTION_FRACTION,
     val chromaticAberration: Boolean = true,
     val highlightAlpha: Float = 0.7f,
     val tintAlpha: Float = 0.25f,
@@ -81,7 +102,20 @@ data class GlassParams(
         const val MIN_BLUR = 0f
         const val MAX_BLUR = 40f
         const val MIN_REFRACTION = 0f
-        const val MAX_REFRACTION = 40f
+        const val MAX_REFRACTION = 1f
+
+        /** 与官方 Playground 一致的默认折射比例 */
+        const val DEFAULT_REFRACTION_FRACTION = 0.2f
+
+        /**
+         * 旧版（绝对 dp）→ 新版（比例）的换算基准。
+         * 旧默认 24dp 对上新默认 0.2 → 每 0.2 比例 = 24dp，即 120dp 对应 1.0。
+         */
+        const val LEGACY_DP_PER_FRACTION = 120f
+
+        /** 旧版 dp 值迁移成新版比例 */
+        fun legacyDpToFraction(dp: Float): Float =
+            (dp / LEGACY_DP_PER_FRACTION).coerceIn(MIN_REFRACTION, MAX_REFRACTION)
     }
 }
 
@@ -139,11 +173,30 @@ fun GlassHost(
 }
 
 /**
- * 玻璃表面修饰符（基于正版 Kyant0 backdrop-android 2.0.1）：
- * - LIQUID：drawBackdrop 真实折射（vibrancy → colorControls，blur → BlurEffect，
- *   lens → SDF 折射+色散；形状须为 CornerBasedShape，否则跳过 lens 只模糊）。
- * - FROSTED：仅 blur（毛玻璃）。
- * - PLAIN / 无录制层：scrim 兜底。
+ * 玻璃表面修饰符（基于正版 Kyant0 backdrop-android 2.0.1）。
+ *
+ * **这是全 App 唯一的玻璃实现**，效果调用顺序与语义严格照搬官方示例
+ * （`GlassPlaygroundContent` / `LiquidButton` / `LiquidBottomTabs`）：
+ *
+ * ```
+ * effects = {
+ *     vibrancy()                       // ① color filter（官方：顺序必须 color filter ⇒ blur ⇒ lens）
+ *     blur(blurPx)                     // ② blur
+ *     lens(                            // ③ lens（折射 + 可选色散）
+ *         refractionHeight  = fracH * size.minDimension * 0.5f,
+ *         refractionAmount  = fracA * size.minDimension,
+ *         depthEffect       = true,
+ *         chromaticAberration = params.chromaticAberration,
+ *     )
+ * }
+ * ```
+ *
+ * 关键点（对照官方仓库）：
+ * - 折射用**比例 × 元素尺寸**，天然满足官方的上界约束；绝对 dp 会让小元素失去效果。
+ * - `depthEffect = true`（官方 Playground 传的就是 true；v1.0 从来没传）。
+ * - `chromaticAberration` 会切换到折射+色散着色器（`RefractionWithDispersion`），
+ *   只有折射带足够宽时才看得见红蓝分离。
+ * - `lens` 只在 API 33+ 且形状受支持时生效（官方文档：需 RuntimeShader）。
  */
 @Composable
 fun Modifier.liquidGlassSurface(
@@ -167,15 +220,20 @@ fun Modifier.liquidGlassSurface(
                 shape = { shape },
                 effects = {
                     if (!size.isSpecified) return@drawBackdrop
+                    // ① color filter
                     if (params.vibrancy) vibrancy()
+                    // ② blur
                     if (blurPx > 0f) blur(blurPx)
-                    if (refraction &&
-                        params.refractionHeightDp > 0f &&
-                        params.refractionAmountDp > 0f
+                    // ③ lens：折射 + 色散（比例 × 尺寸，保证可见性）
+                    if (refraction && isLensShapeSupported(shape) &&
+                        params.refractionHeightFraction > 0f &&
+                        params.refractionAmountFraction > 0f
                     ) {
+                        val minDimension = size.minDimension
                         lens(
-                            refractionHeight = with(density) { params.refractionHeightDp.dp.toPx() },
-                            refractionAmount = with(density) { params.refractionAmountDp.dp.toPx() },
+                            refractionHeight = params.refractionHeightFraction * minDimension * 0.5f,
+                            refractionAmount = params.refractionAmountFraction * minDimension,
+                            depthEffect = true,
                             chromaticAberration = params.chromaticAberration,
                         )
                     }
@@ -188,18 +246,20 @@ fun Modifier.liquidGlassSurface(
                     null
                 },
                 onDrawSurface = {
-                    drawRect(colors.glassTint.copy(alpha = params.tintAlpha))
+                    drawRect(surfaceColor.copy(alpha = params.tintAlpha))
                 },
             )
         }
 
         mode == GlassMode.FROSTED && backdrop != null -> {
-            val blurPx = with(density) { params.blurRadiusDp.dp.toPx() }.coerceAtLeast(with(density) { 1.dp.toPx() })
+            // 毛玻璃档 = 只有模糊（官方：RenderEffect 需 API 31+）。
+            // 同样「所见即所得」：模糊为 0 就不模糊。
+            val blurPx = with(density) { params.blurRadiusDp.dp.toPx() }
             this.drawBackdrop(
                 backdrop = backdrop,
                 shape = { shape },
                 effects = {
-                    if (size.isSpecified) blur(blurPx)
+                    if (size.isSpecified && blurPx > 0f) blur(blurPx)
                 },
                 onDrawSurface = {
                     drawRect(colors.glassTint.copy(alpha = (params.tintAlpha + 0.35f).coerceAtMost(0.8f)))
@@ -215,4 +275,11 @@ fun Modifier.liquidGlassSurface(
         }
     }
 }
+
+/**
+ * `lens` 只支持 [CornerBasedShape] 与 Kyant0 的 `RoundedRectangularShape`；
+ * 其他形状库会直接抛异常。这里显式判断，避免换形状时崩在 draw 阶段。
+ */
+private fun isLensShapeSupported(shape: Shape): Boolean =
+    shape is com.kyant.shapes.RoundedRectangularShape || shape is CornerBasedShape
 
